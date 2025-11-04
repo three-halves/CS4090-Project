@@ -28,8 +28,9 @@ namespace Db
             modelBuilder.Entity<User>().HasData(new User
             {
                 Id = Guid.Parse("fc771b9e-2a04-42a6-b73a-714d6ddc3feb"),
+                Username = "testuser",
                 Name = "Test User",
-                PasswordHash = "",
+                PasswordHash = AppAuthenticator.GetPasswordHash("Test Password"),
                 Organizing = [],
                 Attending = [],
                 Attendance = []
@@ -54,6 +55,7 @@ namespace Db
         [Key]
         public Guid Id { get; set; }
         public string Name { get; set; } = "";
+        public string Username { get; set; } = "";
         public string PasswordHash { get; set; } = "";
 
         public List<Event> Organizing { get; set; } = [];

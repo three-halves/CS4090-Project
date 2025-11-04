@@ -1,5 +1,46 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+@inject AppAuthenticator AppAuthenticator
 
 <PageTitle>Home</PageTitle>
 
 <h1>Login</h1>
+<AuthorizeView Context="Account">
+    <NotAuthorized>
+        <label for="username">Username:</label>
+        <InputText name="username" type="text" style="width: 400px" @bind-Value="username"></InputText><br />
+        <label for="password">Password:</label>
+        <InputText name="password" type="password" style="width: 400px" @bind-Value="password"></InputText><br />
+        <button onclick="@TryLogin">Login</button><br />
+        <p style="color: #f00">@error</p>
+    </NotAuthorized>
+    <Authorized>
+        <p>Username: @Account.User.Identity?.Name</p>
+        <button type="button" class="btn btn-primary" @onclick="TryLogout">Logout</button>
+    </Authorized>
+    <Authorizing>
+        <p>Authorizing in process...</p>
+    </Authorizing>
+</AuthorizeView>
+
+@code {
+    private string username = "";
+    private string password = "";
+    private string error = "";
+
+    private async Task TryLogin()
+    {
+        error = "";
+        StateHasChanged();
+        if (!(await AppAuthenticator.LoginAsync(username, AppAuthenticator.GetPasswordHash(password))))
+        {
+            error = "Invalid Username or Password";
+            StateHasChanged();
+        }
+    }
+
+    private async Task TryLogout()
+    {
+        await AppAuthenticator.LogoutAsync();
+    }
+}
