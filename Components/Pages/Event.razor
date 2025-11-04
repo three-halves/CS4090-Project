@@ -1,0 +1,31 @@
+@page "/event/{ID:guid}"
+@implements IDisposable
+@using Db
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DatabaseContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<h1>@(event_?.Title)</h1>
+<p>@(event_?.Description)</p>
+<p>@ID</p>
+
+@code {
+    [Parameter]
+    public Guid ID { get; set; }
+
+    private Db.Event? event_;
+    private DatabaseContext? Context { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Context = await DbFactory.CreateDbContextAsync();
+        event_ = await Context.Events.FindAsync(ID);
+        List<Db.Event> events = await Context.Events.ToListAsync();
+        if (event_ == null)
+        {
+            NavigationManager.NavigateTo("/not-found", true);
+        }
+    }
+
+    public void Dispose() => Context?.Dispose();
+}
