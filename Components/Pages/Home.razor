@@ -1,5 +1,9 @@
 ﻿@page "/"
+@implements IDisposable
 @rendermode InteractiveServer
+@using Db
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DatabaseContext> DbFactory
 @inject AppAuthenticator AppAuthenticator
 
 <PageTitle>Home</PageTitle>
@@ -11,12 +15,32 @@
         <InputText name="username" type="text" style="width: 400px" @bind-Value="username"></InputText><br />
         <label for="password">Password:</label>
         <InputText name="password" type="password" style="width: 400px" @bind-Value="password"></InputText><br />
-        <button onclick="@TryLogin">Login</button><br />
+        <button @onclick="TryLogin">Login</button><br />
         <p style="color: #f00">@error</p>
     </NotAuthorized>
     <Authorized>
-        <p>Username: @Account.User.Identity?.Name</p>
+        <p>Name: @user?.Name</p>
+        <p>Username: @user?.Username</p>
         <button type="button" class="btn btn-primary" @onclick="TryLogout">Logout</button>
+        <p>Organizing Events</p>
+        <button @onclick="CreateEvent">Create Event</button>
+        <div>
+            @foreach (Db.Event event_ in user?.Organizing ?? [])
+            {
+                <a href="/event/@event_.Id">@event_.Title</a>
+            
+                <br />
+            }
+        </div>
+        <p>Attending Events</p>
+        <div>
+            @foreach (Db.Event event_ in user?.Attending ?? [])
+            {
+                <a href="/@event_.Id">@event_.Title</a>
+            
+                <br/>
+            }
+        </div>
     </Authorized>
     <Authorizing>
         <p>Authorizing in process...</p>
@@ -24,9 +48,20 @@
 </AuthorizeView>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationState { get; set; }
+
     private string username = "";
     private string password = "";
     private string error = "";
+    private User? user;
+    private DatabaseContext? context;
+
+    protected override async Task OnInitializedAsync()
+    {
+        context = await DbFactory.CreateDbContextAsync();
+        await UpdateUser();
+    }
 
     private async Task TryLogin()
     {
@@ -37,10 +72,50 @@
             error = "Invalid Username or Password";
             StateHasChanged();
         }
+        else
+        {
+            await UpdateUser();
+        }
     }
 
     private async Task TryLogout()
     {
         await AppAuthenticator.LogoutAsync();
+        StateHasChanged();
+        await UpdateUser();
     }
+
+    private async Task UpdateUser()
+    {
+        if (authenticationState != null)
+        {
+            var authState = await authenticationState;
+            if (context != null && authState?.User.Identity?.Name != null)
+            {
+                user = await context.Users.FindAsync(new Guid(authState.User.Identity.Name));
+                if (user != null)
+                {
+                    await context.Entry(user).Collection(user => user.Organizing).LoadAsync();
+                    await context.Entry(user).Collection(user => user.Attending).LoadAsync();
+                }
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task CreateEvent()
+    {
+        if (context != null && user != null)
+        {
+            await context.Events.AddAsync(new Db.Event
+            {
+                Id = new Guid(),
+                Title = "New Event",
+                OrganizerId = user.Id
+            });
+            await context.SaveChangesAsync();
+        }
+    }
+
+    public void Dispose() => context?.Dispose();
 }

@@ -24,7 +24,7 @@ public class AppAuthenticator(ProtectedLocalStorage protectedLocalStorage, Datab
                 var user = JsonSerializer.Deserialize<User>(storedPrincipal.Value);
                 if (user != null)
                 {
-                    var (_, isLookUpSuccess) = LookUpUser(user.Name, user.PasswordHash);
+                    var (_, isLookUpSuccess) = LookUpUserId(user.Id, user.PasswordHash);
 
                     if (isLookUpSuccess)
                     {
@@ -44,7 +44,7 @@ public class AppAuthenticator(ProtectedLocalStorage protectedLocalStorage, Datab
 
     public async Task<bool> LoginAsync(string username, string passwordHash)
     {
-        var (userInDatabase, isSuccess) = LookUpUser(username, passwordHash);
+        var (userInDatabase, isSuccess) = LookUpUsername(username, passwordHash);
         var principal = new ClaimsPrincipal();
 
         if (isSuccess && userInDatabase != null)
@@ -72,8 +72,7 @@ public class AppAuthenticator(ProtectedLocalStorage protectedLocalStorage, Datab
     {
         return new ClaimsIdentity(
         [
-            new (ClaimTypes.Name, user.Username),
-            new (ClaimTypes.Hash, user.PasswordHash),
+            new (ClaimTypes.Name, user.Id.ToString()),
         ], "CS4090");
     }
 
@@ -88,9 +87,16 @@ public class AppAuthenticator(ProtectedLocalStorage protectedLocalStorage, Datab
         64));
     }
 
-    private (User?, bool) LookUpUser(string username, string passwordHash)
+    private (User?, bool) LookUpUsername(string username, string passwordHash)
     {
         var result = context.Users.FirstOrDefault(u => username == u.Username && passwordHash == u.PasswordHash);
+
+        return (result, result is not null);
+    }
+
+    private (User?, bool) LookUpUserId(Guid id, string passwordHash)
+    {
+        var result = context.Users.FirstOrDefault(u => id == u.Id && passwordHash == u.PasswordHash);
 
         return (result, result is not null);
     }

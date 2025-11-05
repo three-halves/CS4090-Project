@@ -14,18 +14,18 @@
     public Guid ID { get; set; }
 
     private Db.Event? event_;
-    private DatabaseContext? Context { get; set; }
+    private DatabaseContext? context;
 
     protected override async Task OnInitializedAsync()
     {
-        Context = await DbFactory.CreateDbContextAsync();
-        event_ = await Context.Events.FindAsync(ID);
-        List<Db.Event> events = await Context.Events.ToListAsync();
+        context = await DbFactory.CreateDbContextAsync();
+        event_ = await context.Events.FindAsync(ID);
+        List<Db.Event> events = await context.Events.ToListAsync();
         if (event_ == null)
         {
             NavigationManager.NavigateTo("/not-found", true);
         }
     }
 
-    public void Dispose() => Context?.Dispose();
+    public void Dispose() => context?.Dispose();
 }
