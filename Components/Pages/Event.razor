@@ -1,13 +1,32 @@
 @page "/event/{ID:guid}"
 @implements IDisposable
 @using Db
+@using System
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DatabaseContext> DbFactory
 @inject NavigationManager NavigationManager
+@rendermode InteractiveServer
 
 <h1>@(event_?.Title)</h1>
 <p>@(event_?.Description)</p>
 <p>@ID</p>
+
+<style>
+.calendar-grid {
+    width: 50%;
+    height: 700px;
+
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+</style>
+
+<div class="calendar-grid" @onmousedown="SetMouseDown" @onmouseup="SetMouseUp" draggable="false">
+    @for(int i = 0; i < 48 * 7; i++) {
+        int _i = i;
+        <UI.TimeStepSelector @ref="AddToSelectors" OnMouseEnter="() => MouseEnterTimeStep(_i)"/>
+    }
+</div>
 
 @code {
     [Parameter]
@@ -15,6 +34,28 @@
 
     private Db.Event? event_;
     private DatabaseContext? context;
+
+    private List<UI.TimeStepSelector> _timeSelectors = new();
+    private UI.TimeStepSelector AddToSelectors {
+        set {_timeSelectors.Add(value); }
+    }
+
+    private bool _mouseDown;
+
+    private void SetMouseDown()
+    {
+        _mouseDown = true;
+    }
+
+    private void SetMouseUp()
+    {
+        _mouseDown = false;
+    }
+
+    private void MouseEnterTimeStep(int index)
+    {
+        if(_mouseDown) _timeSelectors[index].ToggleAvailability();
+    }
 
     protected override async Task OnInitializedAsync()
     {

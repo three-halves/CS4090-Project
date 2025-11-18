@@ -1,0 +1,59 @@
+@namespace UI
+@rendermode InteractiveServer
+
+<style>
+.Available {
+    background-color: green;
+}
+
+.Unavailable {
+    background-color: red;
+}
+
+.Disabled {
+    background-color: grey;
+}
+
+div {
+    width: 100%;
+    height: 100%;
+    outline: 1px solid black
+}
+
+</style>
+
+<div class=@CurrentState.ToString() 
+    @onclick="ToggleAvailability" 
+    @onmouseenter="MouseEnterHandler"
+    draggable="false"> 
+</div>
+
+@code{
+    [Parameter]
+    public EventCallback<MouseEventArgs> OnMouseEnter { get; set; }
+
+    public enum State 
+    {
+        Available,
+        Unavailable,
+        Disabled
+    }
+
+    public State CurrentState = State.Unavailable;
+
+    public async void MouseEnterHandler(MouseEventArgs args)
+    {
+        await OnMouseEnter.InvokeAsync(args);
+    }
+
+    public void ToggleAvailability() 
+    {
+        switch (CurrentState) 
+        {
+            case State.Available: CurrentState = State.Unavailable; break; 
+            case State.Unavailable: CurrentState = State.Available; break;
+            default: return;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+}
