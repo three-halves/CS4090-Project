@@ -24,6 +24,7 @@
     column-gap: 0.1rem;
 }
 .calendar-toolbar {
+    display: flex;
     width: 50%;
 }
 </style>
@@ -37,7 +38,7 @@
                 <UI.CalendarCell
                 @ref="AddToSelectors"
                 OnMouseEnter="() => MouseEnterTimeStep(_i)" 
-                MaxAttendeeCount=@event_.Attendees.Count() 
+                MaxAttendeeCount=@event_!.Attendees.Count() 
                 AttendeeCount=@_calendarCellAttendeeCounts[_i] />
             }
         </div>
@@ -45,6 +46,7 @@
         <div class="calendar-toolbar">
         <button @onclick="SubmitAvailability">Submit Availability</button>
         <button @onclick="ResetCalendar">Reset Calendar</button>
+        <button @onclick="DeleteUserAvailability">Delete My Availability</button>
         </div>
     </Authorized>
     <NotAuthorized>
@@ -117,7 +119,7 @@
             }
         }
 
-        InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
     }
 
     private void ResetCalendar()
@@ -164,10 +166,14 @@
                 Availability=times
             };
 
-            Attendance? entryToUpdate = context.Attendance
-                .Where(a => a.UserId == user_.Id)
-                .Where(a => a.EventId == event_.Id)
-                .First();
+            Attendance? entryToUpdate = null;
+            if (context.Attendance.Count() > 0)
+            {
+                entryToUpdate = context.Attendance
+                    .Where(a => a.UserId == user_.Id)
+                    .Where(a => a.EventId == event_.Id)
+                    .First();
+            }
 
             Console.WriteLine(entryToUpdate == null);
             // Insert into db, either add or update if already exists
@@ -182,6 +188,16 @@
             await context.SaveChangesAsync();
 
         }
+    }
+
+    private async void DeleteUserAvailability()
+    {
+        context?.Attendance.RemoveRange(context.Attendance
+            .Where(a => a.UserId == user_!.Id)
+            .Where(a => a.EventId == event_!.Id)
+            );
+    
+        await context?.SaveChangesAsync();
     }
 
     public void Dispose() => context?.Dispose();
