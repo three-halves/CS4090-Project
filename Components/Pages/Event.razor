@@ -3,6 +3,7 @@
 @using Db
 @using System
 @using Microsoft.EntityFrameworkCore
+@using System.Globalization
 @inject IDbContextFactory<DatabaseContext> DbFactory
 @inject NavigationManager NavigationManager
 @rendermode InteractiveServer
@@ -19,7 +20,7 @@
 
     display: grid;
     grid-template-rows: repeat(48, 1fr);
-    grid-template-columns: repeat(@((event_.LastPossibleDate - event_.FirstPossibleDate).TotalDays), 1fr);
+    grid-template-columns: repeat(@(_totalCells/48), 1fr);
     column-gap: 0.1rem;
 }
 .calendar-toolbar {
@@ -30,9 +31,14 @@
 <AuthorizeView Context="Account"> 
     <Authorized>
         <div class="calendar-grid" @onmousedown="SetMouseDown" @onmouseup="SetMouseUp" draggable="false">
-            @for(int i = 0; i < 48 * ((event_.LastPossibleDate - event_.FirstPossibleDate).TotalDays); i++) {
+            @for (int i = 0; i < _totalCells; i++)
+            {
                 int _i = i;
-                <UI.TimeStepSelector @ref="AddToSelectors" OnMouseEnter="() => MouseEnterTimeStep(_i)"/>
+                <UI.CalendarCell
+                @ref="AddToSelectors"
+                OnMouseEnter="() => MouseEnterTimeStep(_i)" 
+                MaxAttendeeCount=@event_.Attendees.Count() 
+                AttendeeCount=@_calendarCellAttendeeCounts[_i] />
             }
         </div>
 
@@ -55,9 +61,18 @@
     private Db.User? user_;
     private DatabaseContext? context;
 
-    private List<UI.TimeStepSelector> _timeSelectors = new();
-    private UI.TimeStepSelector AddToSelectors {
-        set {_timeSelectors.Add(value); }
+    private List<int> _calendarCellAttendeeCounts = new();
+
+    // How many cells/time slots the calendar needs to render
+    private int _totalCells;
+
+    private List<UI.CalendarCell> _calendarCells = new();
+    private UI.CalendarCell AddToSelectors {
+        set 
+        {
+            if (_calendarCells.Count() >= _totalCells) return;
+            _calendarCells.Add(value); 
+        }
     }
 
     // Mouse down state used for dragging input
@@ -75,7 +90,7 @@
 
     private void MouseEnterTimeStep(int index)
     {
-        if(_mouseDown) _timeSelectors[index].ToggleAvailability();
+        if(_mouseDown) _calendarCells[index].ToggleAvailability();
     }
 
     protected override async Task OnInitializedAsync()
@@ -87,14 +102,43 @@
         {
             NavigationManager.NavigateTo("/not-found", true);
         }
+
         AuthenticationState? authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (context != null && authState?.User.Identity?.Name != null)
             user_ = await context.Users.FindAsync(new Guid(authState.User.Identity.Name));
+
+        if (event_ != null && context != null)
+        {
+            _totalCells = 48 * (int)((event_.LastPossibleDate - event_.FirstPossibleDate).TotalDays);
+            // initialize calendar cells
+            for(int i = 0; i < _totalCells; i++)
+            {
+                _calendarCellAttendeeCounts.Add(GetUsersAvailableAtIndex(i).Count());
+            }
+        }
+
+        InvokeAsync(StateHasChanged);
     }
 
     private void ResetCalendar()
     {
-        _timeSelectors.ForEach(x => x.CurrentState = UI.TimeStepSelector.State.Unavailable);
+        _calendarCells.ForEach(x => x.CurrentState = UI.CalendarCell.State.Unavailable);
+    }
+
+    private List<User> GetUsersAvailableAtIndex(int index)
+    {
+        List<User> users = new();
+        DateTime dateTime = GetDateTimeFromIndex(index);
+        return context!.Users
+            .Where(u => u.Attendance
+                .Any(a => a.EventId == event_!.Id && a.Availability.Contains(dateTime)))
+            .ToList();
+    }
+
+    private DateTime GetDateTimeFromIndex(int index)
+    {
+        DateTime dateTime = event_!.FirstPossibleDate;
+        return dateTime.AddDays(index / 48).AddMinutes((index % 48) * 15);
     }
 
     private async void SubmitAvailability()
@@ -103,15 +147,13 @@
         {
             List<DateTime> times = new();
             // Add all available 15 minute time slots to db
-            for (int i = 0; i < _timeSelectors.Count; i++)
+            for (int i = 0; i < _calendarCells.Count; i++)
             {
-                var ts = _timeSelectors[i];
-                if (ts.CurrentState != UI.TimeStepSelector.State.Available) continue;
+                var ts = _calendarCells[i];
+                if (ts.CurrentState != UI.CalendarCell.State.Available) continue;
 
                 // Create DateTime object for db, timestamp relative to event first possible date
-                DateTime dateTime = event_!.FirstPossibleDate;
-                dateTime = dateTime.AddDays(i / 48).AddMinutes((i % 48) * 15);
-                times.Add(dateTime);
+                times.Add(GetDateTimeFromIndex(i));
             }
 
             // Create entry
@@ -126,7 +168,7 @@
                 .Where(a => a.UserId == user_.Id)
                 .Where(a => a.EventId == event_.Id)
                 .First();
-                
+
             Console.WriteLine(entryToUpdate == null);
             // Insert into db, either add or update if already exists
             if (entryToUpdate == null)

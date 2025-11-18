@@ -3,11 +3,19 @@
 
 <style>
 .Available {
-    background-color: lightgreen;
+        background-color: color-mix(
+        in lab,
+        darkgrey,
+        green calc(@(AttendeeCount+1) / @MaxAttendeeCount * 100%)
+        );
 }
 
 .Unavailable {
-    background-color: gray;
+    background-color: color-mix(
+        in lab,
+        darkgrey,
+        green calc(@AttendeeCount / @MaxAttendeeCount * 100%)
+        );
 }
 
 .Disabled {
@@ -31,6 +39,17 @@ div {
 @code{
     [Parameter]
     public EventCallback<MouseEventArgs> OnMouseEnter { get; set; }
+
+    [Parameter]
+    public int MaxAttendeeCount { get; set; }
+
+    [Parameter]
+    public int AttendeeCount {get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
 
     public enum State 
     {
