@@ -62,7 +62,7 @@
                 {
                     int _i = i;
                     <label style="height: 50%;">
-                    @(event_.FirstPossibleDate.AddMinutes(_i * 15).ToString("HH:mm"))
+                    @(event_?.FirstPossibleDate.AddMinutes(_i * 15).ToString("HH:mm"))
                     </label>
                 }
             </div>
@@ -71,7 +71,7 @@
                 @for (int i = 0; i < _totalCells/48; i++)
                 {
                     int _i = i;
-                    <label>@(event_.FirstPossibleDate.AddDays(i).ToString("ddd"))</label>
+                    <label>@(event_?.FirstPossibleDate.AddDays(i).ToString("ddd"))</label>
                 }
                 </div>
 
