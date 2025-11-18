@@ -8,6 +8,7 @@ namespace Db
     {
         public DbSet<User> Users { get; set; }
         public DbSet<Event> Events { get; set; }
+        public DbSet<Attendance> Attendance { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -75,6 +76,9 @@ namespace Db
         public Privacy Privacy { get; set; } = Privacy.PUBLIC_IDENTIFIED;
         public DateTime? FinalizedStart { get; set; } = null;
         public DateTime? FinalizedEnd { get; set; } = null;
+
+        public DateTime FirstPossibleDate { get; set; } = DateTime.UnixEpoch;
+        public DateTime LastPossibleDate { get; set; } = DateTime.UnixEpoch.AddDays(7);
 
         public Guid OrganizerId { get; set; }
         public User Organizer { get; set; }

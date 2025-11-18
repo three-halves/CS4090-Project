@@ -6,6 +6,7 @@
 @inject IDbContextFactory<DatabaseContext> DbFactory
 @inject NavigationManager NavigationManager
 @rendermode InteractiveServer
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <h1>@(event_?.Title)</h1>
 <p>@(event_?.Description)</p>
@@ -13,26 +14,45 @@
 
 <style>
 .calendar-grid {
-    width: 50%;
-    height: 700px;
+    width:  clamp(100px, 50%, 600px);
+    height: 40rem;
 
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(48, 1fr);
+    grid-template-columns: repeat(@((event_.LastPossibleDate - event_.FirstPossibleDate).TotalDays), 1fr);
+    column-gap: 0.1rem;
+}
+.calendar-toolbar {
+    width: 50%;
 }
 </style>
 
-<div class="calendar-grid" @onmousedown="SetMouseDown" @onmouseup="SetMouseUp" draggable="false">
-    @for(int i = 0; i < 48 * 7; i++) {
-        int _i = i;
-        <UI.TimeStepSelector @ref="AddToSelectors" OnMouseEnter="() => MouseEnterTimeStep(_i)"/>
-    }
-</div>
+<AuthorizeView Context="Account"> 
+    <Authorized>
+        <div class="calendar-grid" @onmousedown="SetMouseDown" @onmouseup="SetMouseUp" draggable="false">
+            @for(int i = 0; i < 48 * ((event_.LastPossibleDate - event_.FirstPossibleDate).TotalDays); i++) {
+                int _i = i;
+                <UI.TimeStepSelector @ref="AddToSelectors" OnMouseEnter="() => MouseEnterTimeStep(_i)"/>
+            }
+        </div>
+
+        <div class="calendar-toolbar">
+        <button @onclick="SubmitAvailability">Submit Availability</button>
+        <button @onclick="ResetCalendar">Reset Calendar</button>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        Login to submit availability for this event.
+    </NotAuthorized>
+</AuthorizeView>
+
 
 @code {
     [Parameter]
     public Guid ID { get; set; }
 
     private Db.Event? event_;
+    private Db.User? user_;
     private DatabaseContext? context;
 
     private List<UI.TimeStepSelector> _timeSelectors = new();
@@ -40,6 +60,7 @@
         set {_timeSelectors.Add(value); }
     }
 
+    // Mouse down state used for dragging input
     private bool _mouseDown;
 
     private void SetMouseDown()
@@ -65,6 +86,59 @@
         if (event_ == null)
         {
             NavigationManager.NavigateTo("/not-found", true);
+        }
+        AuthenticationState? authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (context != null && authState?.User.Identity?.Name != null)
+            user_ = await context.Users.FindAsync(new Guid(authState.User.Identity.Name));
+    }
+
+    private void ResetCalendar()
+    {
+        _timeSelectors.ForEach(x => x.CurrentState = UI.TimeStepSelector.State.Unavailable);
+    }
+
+    private async void SubmitAvailability()
+    {
+        if (context != null && user_ != null)
+        {
+            List<DateTime> times = new();
+            // Add all available 15 minute time slots to db
+            for (int i = 0; i < _timeSelectors.Count; i++)
+            {
+                var ts = _timeSelectors[i];
+                if (ts.CurrentState != UI.TimeStepSelector.State.Available) continue;
+
+                // Create DateTime object for db, timestamp relative to event first possible date
+                DateTime dateTime = event_!.FirstPossibleDate;
+                dateTime = dateTime.AddDays(i / 48).AddMinutes((i % 48) * 15);
+                times.Add(dateTime);
+            }
+
+            // Create entry
+            var newEntry = new Db.Attendance
+            {
+                UserId=user_.Id,
+                EventId=event_!.Id,
+                Availability=times
+            };
+
+            Attendance? entryToUpdate = context.Attendance
+                .Where(a => a.UserId == user_.Id)
+                .Where(a => a.EventId == event_.Id)
+                .First();
+                
+            Console.WriteLine(entryToUpdate == null);
+            // Insert into db, either add or update if already exists
+            if (entryToUpdate == null)
+            {
+                await context.AddAsync(newEntry);
+            }
+            else
+            {
+                context.Entry(entryToUpdate).CurrentValues.SetValues(newEntry);
+            }
+            await context.SaveChangesAsync();
+
         }
     }
 

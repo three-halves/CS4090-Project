@@ -3,15 +3,15 @@
 
 <style>
 .Available {
-    background-color: green;
+    background-color: lightgreen;
 }
 
 .Unavailable {
-    background-color: red;
+    background-color: gray;
 }
 
 .Disabled {
-    background-color: grey;
+    background-color: black;
 }
 
 div {
@@ -22,8 +22,8 @@ div {
 
 </style>
 
-<div class=@CurrentState.ToString() 
-    @onclick="ToggleAvailability" 
+<div class=@_currentState.ToString() 
+    @onmousedown="ToggleAvailability" 
     @onmouseenter="MouseEnterHandler"
     draggable="false"> 
 </div>
@@ -39,7 +39,15 @@ div {
         Disabled
     }
 
-    public State CurrentState = State.Unavailable;
+    public State CurrentState {
+        get {return _currentState;} 
+        set
+        {
+            if (_currentState != State.Disabled)
+                _currentState = value;
+        }
+    }
+    private State _currentState = State.Unavailable;
 
     public async void MouseEnterHandler(MouseEventArgs args)
     {
@@ -48,10 +56,10 @@ div {
 
     public void ToggleAvailability() 
     {
-        switch (CurrentState) 
+        switch (_currentState) 
         {
-            case State.Available: CurrentState = State.Unavailable; break; 
-            case State.Unavailable: CurrentState = State.Available; break;
+            case State.Available: _currentState = State.Unavailable; break; 
+            case State.Unavailable: _currentState = State.Available; break;
             default: return;
         }
         InvokeAsync(StateHasChanged);

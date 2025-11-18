@@ -3,7 +3,7 @@ using Db;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 
-using (var context = new DatabaseContext(new DbContextOptions<DatabaseContext>())) { context.Database.EnsureCreated(); }
+// using (var context = new DatabaseContext(new DbContextOptions<DatabaseContext>())) { context.Database.EnsureCreated(); }
 
 var builder = WebApplication.CreateBuilder(args);
 
