@@ -1,29 +1,87 @@
 @page "/event/{ID:guid}"
 @implements IDisposable
+@rendermode InteractiveServer
 @using Db
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<DatabaseContext> DbFactory
 @inject NavigationManager NavigationManager
 
-<h1>@(event_?.Title)</h1>
-<p>@(event_?.Description)</p>
+<AuthorizeView Context="Account">
+    <Authorized>
+        @if (user?.Id == event_.OrganizerId)
+        {
+            @if (editingDetails)
+            {
+                <input style="width: 30%" @bind="event_.Title" type="text">
+                <br />
+                <textarea style="width: 30%" @bind="event_.Description"></textarea>
+                <br />
+                <button style="width: 30%" @onclick="SaveDetails">Save</button>
+            }
+            else
+            {
+                <h1>@(event_.Title)</h1>
+                <p>@(event_.Description)</p>
+                <button @onclick="() => editingDetails = true">Edit</button>
+            }
+        }
+        else
+        {
+            <h1>@(event_.Title)</h1>
+            <p>@(event_.Description)</p>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <h1>@(event_.Title)</h1>
+        <p>@(event_.Description)</p>
+    </NotAuthorized>
+</AuthorizeView>
 <p>@ID</p>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationState { get; set; }
     [Parameter]
     public Guid ID { get; set; }
 
-    private Db.Event? event_;
+    private Db.Event event_ = new();
+    private User? user;
+
     private DatabaseContext? context;
+    private bool editingDetails;
 
     protected override async Task OnInitializedAsync()
     {
         context = await DbFactory.CreateDbContextAsync();
-        event_ = await context.Events.FindAsync(ID);
+        event_ = await context.Events.FindAsync(ID) ?? event_;
         List<Db.Event> events = await context.Events.ToListAsync();
         if (event_ == null)
         {
             NavigationManager.NavigateTo("/not-found", true);
+        }
+        await UpdateUser();
+    }
+
+    private async Task UpdateUser()
+    {
+        if (authenticationState != null)
+        {
+            var authState = await authenticationState;
+            if (context != null && authState?.User.Identity?.Name != null)
+            {
+                user = await context.Users.FindAsync(new Guid(authState.User.Identity.Name));
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SaveDetails()
+    {
+        if (context != null && user?.Id == event_.OrganizerId)
+        {
+            context.Update(event_);
+            await context.SaveChangesAsync();
+            editingDetails = false;
         }
     }
 

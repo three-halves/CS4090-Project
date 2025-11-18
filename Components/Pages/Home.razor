@@ -14,8 +14,9 @@
         <label for="username">Username:</label>
         <InputText name="username" type="text" style="width: 400px" @bind-Value="username"></InputText><br />
         <label for="password">Password:</label>
-        <InputText name="password" type="password" style="width: 400px" @bind-Value="password"></InputText><br />
-        <button @onclick="TryLogin">Login</button><br />
+        <InputText name="password" type="password" style="width: 400px" @bind-Value="password"
+            onkeyup="if (event.keyCode == 13) { login.click(); }"></InputText><br />
+        <button id="login" @onclick="TryLogin">Login</button><br />
         <p style="color: #f00">@error</p>
     </NotAuthorized>
     <Authorized>
@@ -24,23 +25,24 @@
         <button type="button" class="btn btn-primary" @onclick="TryLogout">Logout</button>
         <p>Organizing Events</p>
         <button @onclick="CreateEvent">Create Event</button>
-        <div>
+        <table>
             @foreach (Db.Event event_ in user?.Organizing ?? [])
             {
-                <a href="/event/@event_.Id">@event_.Title</a>
-            
-                <br />
+                <tr>
+                    <td><a href="/event/@event_.Id">@event_.Title</a></td>
+                    <td><button @onclick="@(async () => await DeleteEvent(event_))">Delete</button></td>
+                </tr>
             }
-        </div>
+        </table>
         <p>Attending Events</p>
-        <div>
+        <table>
             @foreach (Db.Event event_ in user?.Attending ?? [])
             {
-                <a href="/@event_.Id">@event_.Title</a>
-            
-                <br/>
+                <tr>
+                    <td> <a href="/@event_.Id">@event_.Title</a></td>
+                </tr>
             }
-        </div>
+        </table>
     </Authorized>
     <Authorizing>
         <p>Authorizing in process...</p>
@@ -113,6 +115,15 @@
                 Title = "New Event",
                 OrganizerId = user.Id
             });
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private async Task DeleteEvent(Db.Event event_)
+    {
+        if (context != null)
+        {
+            context.Events.Remove(event_);
             await context.SaveChangesAsync();
         }
     }

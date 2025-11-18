@@ -115,6 +115,20 @@ input::-webkit-inner-spin-button {
     -webkit-appearance: none;
 }
 
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 2px solid #ffffff;
+    background-color: #000000;
+    color: #ffffff;
+    outline: none;
+}
+
+textarea[type=number]:focus {
+    background-color: #ffffff;
+    color: #000000;
+}
+
 select {
     width: 200px;
     box-sizing: border-box;
