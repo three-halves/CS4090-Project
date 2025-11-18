@@ -2,21 +2,6 @@
 @rendermode InteractiveServer
 
 <style>
-.Available {
-        background-color: color-mix(
-        in lab,
-        darkgrey,
-        green calc(@(AttendeeCount+1) / @MaxAttendeeCount * 100%)
-        );
-}
-
-.Unavailable {
-    background-color: color-mix(
-        in lab,
-        darkgrey,
-        green calc(@AttendeeCount / @MaxAttendeeCount * 100%)
-        );
-}
 
 .Disabled {
     background-color: black;
@@ -33,7 +18,11 @@ div {
 <div class=@_currentState.ToString() 
     @onmousedown="ToggleAvailability" 
     @onmouseenter="MouseEnterHandler"
-    draggable="false"> 
+    draggable="false"
+    style="background-color: color-mix(in lab,
+        darkgrey,
+        green calc(@(_currentState == State.Available ? _selectedRatio : _ratio) * 100%)
+        "> 
 </div>
 
 @code{
@@ -48,8 +37,14 @@ div {
 
     protected override async Task OnInitializedAsync()
     {
+        _ratio = ((float)AttendeeCount) / MaxAttendeeCount;
+        _selectedRatio = ((float)AttendeeCount + 1) / MaxAttendeeCount;
         await InvokeAsync(StateHasChanged);
     }
+
+    private float _ratio = 0.5f;
+    private float _selectedRatio = 0.5f;
+
 
     public enum State 
     {

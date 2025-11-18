@@ -20,7 +20,6 @@
     display: grid;
     grid-template-rows: repeat(24, 1fr);
     padding-top: 1.25rem;
-    @* padding-right: 0.2rem; *@
 
     text-align: right;
     font-size: 0.8rem;
@@ -82,7 +81,7 @@
                         <UI.CalendarCell
                         @ref="AddToSelectors"
                         OnMouseEnter="() => MouseEnterTimeStep(_i)" 
-                        MaxAttendeeCount=@event_!.Attendees.Count() 
+                        MaxAttendeeCount=@_attendeeCount 
                         AttendeeCount=@_calendarCellAttendeeCounts[_i] />
                     }
                     </div>
@@ -113,6 +112,7 @@
 
     // How many cells/time slots the calendar needs to render
     private int _totalCells;
+    private int _attendeeCount = 0;
 
     private List<UI.CalendarCell> _calendarCells = new();
     private UI.CalendarCell AddToSelectors {
@@ -155,9 +155,13 @@
         if (context != null && authState?.User.Identity?.Name != null)
             user_ = await context.Users.FindAsync(new Guid(authState.User.Identity.Name));
 
-        if (event_ != null && context != null)
+        if (event_ != null && context != null && user_ != null)
         {
             _totalCells = 48 * (int)((event_.LastPossibleDate - event_.FirstPossibleDate).TotalDays);
+            _attendeeCount = context.Attendance
+                .Where(a => a.EventId == event_.Id)
+                .GroupBy(a => a.UserId).Count();
+            
             // initialize calendar cells
             for(int i = 0; i < _totalCells; i++)
             {
@@ -177,9 +181,13 @@
     {
         List<User> users = new();
         DateTime dateTime = GetDateTimeFromIndex(index);
-        return context!.Users
-            .Where(u => u.Attendance
-                .Any(a => a.EventId == event_!.Id && a.Availability.Contains(dateTime)))
+
+        var attendanceAtTime = context.Attendance
+            .Where(a => a.EventId == event_.Id)
+            .Where(a => a.Availability.Contains(dateTime));
+
+        return context.Users
+            .Where(u => attendanceAtTime.Any(a => a.UserId == u.Id && a.UserId != user_.Id))
             .ToList();
     }
 
@@ -221,7 +229,6 @@
                     .First();
             }
 
-            Console.WriteLine(entryToUpdate == null);
             // Insert into db, either add or update if already exists
             if (entryToUpdate == null)
             {
