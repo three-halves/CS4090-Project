@@ -9,44 +9,90 @@
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
+<style>
+.calendar {
+    width: clamp(100px, 50%, 600px);
+    display: grid;
+    grid-template-columns: 0.2fr 1fr;
+}
+
+.calendar-time-col {
+    display: grid;
+    grid-template-rows: repeat(24, 1fr);
+    padding-top: 1.25rem;
+    @* padding-right: 0.2rem; *@
+
+    text-align: right;
+    font-size: 0.8rem;
+    text-justify: center;
+    height: 42rem;
+}
+
+.calendar-grid {
+    height: 42rem;
+    display: grid;
+    grid-template-rows: repeat(48, 1fr);
+    grid-template-columns: repeat(@(_totalCells/48), 1fr);
+    column-gap: 0.12rem;
+}
+
+.calendar-header {
+    height: 1.25rem;
+
+    display: grid;
+    grid-template-columns: repeat(@(_totalCells/48), 1fr);
+    column-gap: 0.1rem;
+}
+
+.calendar-toolbar {
+    grid-row-start: span 2;
+    display: flex;
+}
+</style>
+
 <h1>@(event_?.Title)</h1>
 <p>@(event_?.Description)</p>
 <p>@ID</p>
 
-<style>
-.calendar-grid {
-    width:  clamp(100px, 50%, 600px);
-    height: 40rem;
-
-    display: grid;
-    grid-template-rows: repeat(48, 1fr);
-    grid-template-columns: repeat(@(_totalCells/48), 1fr);
-    column-gap: 0.1rem;
-}
-.calendar-toolbar {
-    display: flex;
-    width: 50%;
-}
-</style>
-
 <AuthorizeView Context="Account"> 
     <Authorized>
-        <div class="calendar-grid" @onmousedown="SetMouseDown" @onmouseup="SetMouseUp" draggable="false">
-            @for (int i = 0; i < _totalCells; i++)
-            {
-                int _i = i;
-                <UI.CalendarCell
-                @ref="AddToSelectors"
-                OnMouseEnter="() => MouseEnterTimeStep(_i)" 
-                MaxAttendeeCount=@event_!.Attendees.Count() 
-                AttendeeCount=@_calendarCellAttendeeCounts[_i] />
-            }
-        </div>
+        <div class="calendar">
+            <div class="calendar-time-col">
+                @for(int i = 1; i < 48; i += 2)
+                {
+                    int _i = i;
+                    <label style="height: 50%;">
+                    @(event_.FirstPossibleDate.AddMinutes(_i * 15).ToString("HH:mm"))
+                    </label>
+                }
+            </div>
+            <div class="calendar-main-col">
+                <div class="calendar-header">
+                @for (int i = 0; i < _totalCells/48; i++)
+                {
+                    int _i = i;
+                    <label>@(event_.FirstPossibleDate.AddDays(i).ToString("ddd"))</label>
+                }
+                </div>
 
-        <div class="calendar-toolbar">
-        <button @onclick="SubmitAvailability">Submit Availability</button>
-        <button @onclick="ResetCalendar">Reset Calendar</button>
-        <button @onclick="DeleteUserAvailability">Delete My Availability</button>
+                <div class="calendar-grid" @onmousedown="SetMouseDown" @onmouseup="SetMouseUp" draggable="false">
+                    @for (int i = 0; i < _totalCells; i++)
+                    {
+                        int _i = i;
+                        <UI.CalendarCell
+                        @ref="AddToSelectors"
+                        OnMouseEnter="() => MouseEnterTimeStep(_i)" 
+                        MaxAttendeeCount=@event_!.Attendees.Count() 
+                        AttendeeCount=@_calendarCellAttendeeCounts[_i] />
+                    }
+                    </div>
+            </div>
+            <div></div>
+            <div class="calendar-toolbar">
+                <button @onclick="SubmitAvailability">Submit Availability</button>
+                <button @onclick="ResetCalendar">Reset Calendar</button>
+                <button @onclick="DeleteUserAvailability">Delete My Availability</button>
+            </div>
         </div>
     </Authorized>
     <NotAuthorized>
