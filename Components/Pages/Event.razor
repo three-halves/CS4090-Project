@@ -1,91 +1,109 @@
 @page "/event/{ID:guid}"
 @implements IDisposable
+@rendermode InteractiveServer
 @using Db
 @using System
 @using Microsoft.EntityFrameworkCore
 @using System.Globalization
 @inject IDbContextFactory<DatabaseContext> DbFactory
 @inject NavigationManager NavigationManager
-@rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <style>
-.calendar {
-    width: clamp(100px, 50%, 600px);
-    display: grid;
-    grid-template-columns: 0.2fr 1fr;
-}
+    .calendar {
+        width: clamp(100px, 50%, 600px);
+        display: grid;
+        grid-template-columns: 0.2fr 1fr;
+    }
 
-.calendar-time-col {
-    display: grid;
-    grid-template-rows: repeat(24, 1fr);
-    padding-top: 1.25rem;
+    .calendar-time-col {
+        display: grid;
+        grid-template-rows: repeat(24, 1fr);
+        padding-top: 1.25rem;
 
-    text-align: right;
-    font-size: 0.8rem;
-    text-justify: center;
-    height: 42rem;
-}
+        text-align: right;
+        font-size: 0.8rem;
+        text-justify: center;
+        height: 42rem;
+    }
 
-.calendar-grid {
-    height: 42rem;
-    display: grid;
-    grid-template-columns: repeat(@(_totalCells/48), 1fr);
-    grid-template-rows: repeat(48, 1fr);
-    grid-auto-flow: column;
-    column-gap: 0.12rem;
-}
+    .calendar-grid {
+        height: 42rem;
+        display: grid;
+        grid-template-columns: repeat(
+                @(_totalCells / 48)
+                , 1fr);
+        grid-template-rows: repeat(48, 1fr);
+        grid-auto-flow: column;
+        column-gap: 0.12rem;
+    }
 
-.calendar-header {
-    height: 1.25rem;
+    .calendar-header {
+        height: 1.25rem;
 
-    display: grid;
-    grid-template-columns: repeat(@(_totalCells/48), 1fr);
-    column-gap: 0.1rem;
-}
+        display: grid;
+        grid-template-columns: repeat(
+                @(_totalCells / 48)
+                , 1fr);
+        column-gap: 0.1rem;
+    }
 
-.calendar-toolbar {
-    grid-row-start: span 2;
-    display: flex;
-}
+    .calendar-toolbar {
+        grid-row-start: span 2;
+        display: flex;
+    }
 </style>
 
-<h1>@(event_?.Title)</h1>
-<p>@(event_?.Description)</p>
-<p>@ID</p>
-
-<AuthorizeView Context="Account"> 
+<AuthorizeView Context="Account">
     <Authorized>
+        @if (user_?.Id == event_.OrganizerId)
+        {
+            @if (editingDetails)
+            {
+                <input style="width: 30%" @bind="event_.Title" type="text">
+                <br />
+                <textarea style="width: 30%" @bind="event_.Description"></textarea>
+                <br />
+                <button style="width: 30%" @onclick="SaveDetails">Save</button>
+            }
+            else
+            {
+                <h1>@(event_.Title)</h1>
+                <p>@(event_.Description)</p>
+                <button @onclick="() => editingDetails = true">Edit</button>
+            }
+        }
+        else
+        {
+            <h1>@(event_.Title)</h1>
+            <p>@(event_.Description)</p>
+        }
         <div class="calendar">
             <div class="calendar-time-col">
-                @for(int i = 1; i < 48; i += 2)
+                @for (int i = 1; i < 48; i += 2)
                 {
                     int _i = i;
                     <label style="height: 50%;">
-                    @(event_?.FirstPossibleDate.AddMinutes(_i * 15).ToString("HH:mm"))
+                        @(event_?.FirstPossibleDate.AddMinutes(_i * 15).ToString("HH:mm"))
                     </label>
                 }
             </div>
             <div class="calendar-main-col">
                 <div class="calendar-header">
-                @for (int i = 0; i < _totalCells/48; i++)
-                {
-                    int _i = i;
-                    <label>@(event_?.FirstPossibleDate.AddDays(i).ToString("ddd"))</label>
-                }
+                    @for (int i = 0; i < _totalCells / 48; i++)
+                    {
+                        int _i = i;
+                        <label>@(event_?.FirstPossibleDate.AddDays(i).ToString("ddd"))</label>
+                    }
                 </div>
 
                 <div class="calendar-grid" @onmousedown="SetMouseDown" @onmouseup="SetMouseUp" draggable="false">
                     @for (int i = 0; i < _totalCells; i++)
                     {
                         int _i = i;
-                        <UI.CalendarCell
-                        @ref="AddToSelectors"
-                        OnMouseEnter="() => MouseEnterTimeStep(_i)" 
-                        MaxAttendeeCount=@_attendeeCount 
-                        AttendeeCount=@_calendarCellAttendeeCounts[_i] />
+                        <UI.CalendarCell @ref="AddToSelectors" OnMouseEnter="() => MouseEnterTimeStep(_i)" MaxAttendeeCount=@_attendeeCount AttendeeCount=@_calendarCellAttendeeCounts[_i] />
                     }
-                    </div>
+                </div>
             </div>
             <div></div>
             <div class="calendar-toolbar">
@@ -96,18 +114,24 @@
         </div>
     </Authorized>
     <NotAuthorized>
+        <h1>@(event_.Title)</h1>
+        <p>@(event_.Description)</p>
         Login to submit availability for this event.
     </NotAuthorized>
 </AuthorizeView>
 
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationState { get; set; }
     [Parameter]
     public Guid ID { get; set; }
 
-    private Db.Event? event_;
-    private Db.User? user_;
+    private Db.Event event_ = new();
+    private User? user_;
+
     private DatabaseContext? context;
+    private bool editingDetails;
 
     private List<int> _calendarCellAttendeeCounts = new();
 
@@ -116,11 +140,12 @@
     private int _attendeeCount = 0;
 
     private List<UI.CalendarCell> _calendarCells = new();
-    private UI.CalendarCell AddToSelectors {
-        set 
+    private UI.CalendarCell AddToSelectors
+    {
+        set
         {
             if (_calendarCells.Count() >= _totalCells) return;
-            _calendarCells.Add(value); 
+            _calendarCells.Add(value);
         }
     }
 
@@ -139,13 +164,13 @@
 
     private void MouseEnterTimeStep(int index)
     {
-        if(_mouseDown) _calendarCells[index].ToggleAvailability();
+        if (_mouseDown) _calendarCells[index].ToggleAvailability();
     }
 
     protected override async Task OnInitializedAsync()
     {
         context = await DbFactory.CreateDbContextAsync();
-        event_ = await context.Events.FindAsync(ID);
+        event_ = await context.Events.FindAsync(ID) ?? event_;
         List<Db.Event> events = await context.Events.ToListAsync();
         if (event_ == null)
         {
@@ -160,17 +185,17 @@
         {
             _totalCells = 48 * (int)((event_.LastPossibleDate - event_.FirstPossibleDate).TotalDays);
             _attendeeCount = context.Attendance
-                .Where(a => a.EventId == event_.Id)
-                .GroupBy(a => a.UserId).Count();
-            
+            .Where(a => a.EventId == event_.Id)
+            .GroupBy(a => a.UserId).Count();
+
             // initialize calendar cells
-            for(int i = 0; i < _totalCells; i++)
+            for (int i = 0; i < _totalCells; i++)
             {
                 _calendarCellAttendeeCounts.Add(GetUsersAvailableAtIndex(i).Count());
             }
         }
 
-        await InvokeAsync(StateHasChanged);
+        await UpdateUser();
     }
 
     private void ResetCalendar()
@@ -184,12 +209,12 @@
         DateTime dateTime = GetDateTimeFromIndex(index);
 
         var attendanceAtTime = context.Attendance
-            .Where(a => a.EventId == event_.Id)
-            .Where(a => a.Availability.Contains(dateTime));
+        .Where(a => a.EventId == event_.Id)
+        .Where(a => a.Availability.Contains(dateTime));
 
         return context.Users
-            .Where(u => attendanceAtTime.Any(a => a.UserId == u.Id && a.UserId != user_.Id))
-            .ToList();
+        .Where(u => attendanceAtTime.Any(a => a.UserId == u.Id && a.UserId != user_.Id))
+        .ToList();
     }
 
     private DateTime GetDateTimeFromIndex(int index)
@@ -216,18 +241,18 @@
             // Create entry
             var newEntry = new Db.Attendance
             {
-                UserId=user_.Id,
-                EventId=event_!.Id,
-                Availability=times
+                UserId = user_.Id,
+                EventId = event_!.Id,
+                Availability = times
             };
 
             Attendance? entryToUpdate = null;
             if (context.Attendance.Count() > 0)
             {
                 entryToUpdate = context.Attendance
-                    .Where(a => a.UserId == user_.Id)
-                    .Where(a => a.EventId == event_.Id)
-                    .First();
+                .Where(a => a.UserId == user_.Id)
+                .Where(a => a.EventId == event_.Id)
+                .First();
             }
 
             // Insert into db, either add or update if already exists
@@ -247,11 +272,34 @@
     private async void DeleteUserAvailability()
     {
         context?.Attendance.RemoveRange(context.Attendance
-            .Where(a => a.UserId == user_!.Id)
-            .Where(a => a.EventId == event_!.Id)
-            );
-    
+        .Where(a => a.UserId == user_!.Id)
+        .Where(a => a.EventId == event_!.Id)
+        );
+
         await context?.SaveChangesAsync();
+    }
+
+    private async Task UpdateUser()
+    {
+        if (authenticationState != null)
+        {
+            var authState = await authenticationState;
+            if (context != null && authState?.User.Identity?.Name != null)
+            {
+                user_ = await context.Users.FindAsync(new Guid(authState.User.Identity.Name));
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SaveDetails()
+    {
+        if (context != null && user_?.Id == event_.OrganizerId)
+        {
+            context.Update(event_);
+            await context.SaveChangesAsync();
+            editingDetails = false;
+        }
     }
 
     public void Dispose() => context?.Dispose();
