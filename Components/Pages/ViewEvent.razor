@@ -24,9 +24,9 @@
     @if (_editingDetails)
     {
         <input style="width: 30%" @bind="_event.Title" type="text">
-        <br />
+        <br>
         <textarea style="width: 30%" @bind="_event.Description"></textarea>
-        <br />
+        <br>
         <button style="width: 30%" @onclick="SaveDetails">Save</button>
     }
     else
@@ -45,90 +45,45 @@ else
 {
     <p><a href="/">Login</a> to submit availability for this event. </p>
 }
-else
-{
-    <table>
-        <tr>
-            <th></th>
+<table>
+    @* Year / Day of Week *@
+    <tr>
+        <th></th>
+        @* Attendance Entry *@
+        @if (_user != null)
+        {
             @for (int date = 0; date < _event.Dates.Count; date++)
             {
                 <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
             }
-        </tr>
-        @if (!_event.DaysOfTheWeek)
-        {
-            <tr>
-                <th></th>
-                @for (int date = 0; date < _event.Dates.Count; date++)
-                {
-                    <th>@(_event.Dates[date].ToString("MM-dd"))</th>
-                }
-            </tr>
         }
-        @for (int time = (int)(_event.EarliestTime - _event.EarliestTime % 4); time < (int)_event.EarliestTime; time++)
-        {
-            <tr>
-                @if (time % 4 == 0)
-                {
-                    <td rowspan="4">@($"{_event.EarliestTime / 4:00}00")</td>
-                }
-                @for (int date = 0; date < _event.Dates.Count; date++)
-                {
-                    <td></td>
-                }
-            </tr>
-        }
-        @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime; time_++)
-        {
-            <tr>
-                @if (time_ % 4 == 0)
-                {
-                    <td rowspan="4">@($"{time_ / 4:00}00")</td>
-                }
-                @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
-                {
-                    int time = time_;
-                    int date = date_;
-                    <td @onmousedown:preventDefault="true" @onmouseenter:preventDefault="true" @onmouseup:preventDefault="true" @onmousedown="@(async _ => await MouseDown(date, time))" @onmouseenter="@(async _ => await MouseEnter(date, time))" @onmouseup="MouseUp" style="background-color: @((InSelection(date, time) || (_attendance != null && (_attendance.Availability[date] & (new UInt128(0, 1) << time)) != 0) && !InDeselection(date, time)) ? "#00bb00" : "#bb0000")"></td>
-                }
-            </tr>
-        }
-        @if (_event.LatestTime % 4 != 0)
-        {
-            @for (uint i = 0; i < (4 - (_event.LatestTime % 4)); i++)
-            {
-                <tr>
-                    @for (int date = 0; date < _event.Dates.Count; date++)
-                    {
-                        <td></td>
-                    }
-                </tr>
-            }
-        }
-    </table>
-    @if (_attendance != null)
-    {
-        <button @onclick="DeleteUserAvailability">Delete My Availability</button>
-    }
-}
-<table>
-    <tr>
-        <th></th>
+        @* Attendance View *@
         @for (int date = 0; date < _event.Dates.Count; date++)
         {
             <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
         }
     </tr>
+    @* Month-Day *@
     @if (!_event.DaysOfTheWeek)
     {
         <tr>
             <th></th>
+            @* Attendance Entry *@
+            @if (_user != null)
+            {
+                @for (int date = 0; date < _event.Dates.Count; date++)
+                {
+                    <th>@(_event.Dates[date].ToString("MM-dd"))</th>
+                }
+            }
+            @* Attendance View *@
             @for (int date = 0; date < _event.Dates.Count; date++)
             {
                 <th>@(_event.Dates[date].ToString("MM-dd"))</th>
             }
         </tr>
     }
+    @* Pad first hour to 4 rows. *@
     @for (int time = (int)(_event.EarliestTime - _event.EarliestTime % 4); time < (int)_event.EarliestTime; time++)
     {
         <tr>
@@ -138,25 +93,43 @@ else
             }
             @for (int date = 0; date < _event.Dates.Count; date++)
             {
+                @if (_user != null)
+                {
+                    <td></td>
+                }
                 <td></td>
             }
         </tr>
     }
-    @for (int time = (int)_event.EarliestTime; time < (int)_event.LatestTime; time++)
+    @* For each time the event may occur... *@
+    @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime; time_++)
     {
         <tr>
-            @if (time % 4 == 0)
+            @* Hour *@
+            @if (time_ % 4 == 0)
             {
-                <td rowspan="4">@($"{time / 4:00}00")</td>
+                <td rowspan="4">@($"{time_ / 4:00}00")</td>
             }
+            @* Attendance Entry *@
+            @if (_user != null)
+            {
+                @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
+                {
+                    int time = time_;
+                    int date = date_;
+                    <td @onmousedown:preventDefault="true" @onmouseenter:preventDefault="true" @onmouseup:preventDefault="true" @onmousedown="@(async _ => await MouseDown(date, time))" @onmouseenter="@(async _ => await MouseEnter(date, time))" @onmouseup="MouseUp" style="background-color: @((InSelection(date, time) || (_attendance != null && (_attendance.Availability[date] & (new UInt128(0, 1) << time)) != 0) && !InDeselection(date, time)) ? "#00bb00" : "#bb0000")"></td>
+                }
+            }
+            @* Attendance View *@
             @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
             {
-                int timeOffset = time - (int)_event.EarliestTime;
+                int timeOffset = time_ - (int)_event.EarliestTime;
                 int date = date_;
                 <td @onmouseenter="@(_ => _attendeeTooltip = [date, timeOffset])" style="background-color: color-mix(in oklab, #fff, #090 @(_maxAttendeesAtOnce > 0 ? _attendances[date][timeOffset].Count * 100d / _maxAttendeesAtOnce : 0)%)"></td>
             }
         </tr>
     }
+    @* Pad last hour to 4 rows. *@
     @if (_event.LatestTime % 4 != 0)
     {
         @for (uint i = 0; i < (4 - (_event.LatestTime % 4)); i++)
@@ -164,21 +137,29 @@ else
             <tr>
                 @for (int date = 0; date < _event.Dates.Count; date++)
                 {
+                    @if (_user != null)
+                    {
+                        <td></td>
+                    }
                     <td></td>
                 }
             </tr>
         }
     }
 </table>
+@if (_attendance != null)
+{
+    <button @onclick="DeleteUserAvailability">Delete My Availability</button>
+}
 <table>
     <tr>
         <th>@($"{_event.Dates[_attendeeTooltip[0]].ToString("yyyy-MM-dd")} {(_attendeeTooltip[1] + _event.EarliestTime) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime) % 4 * 15:00} - {(_attendeeTooltip[1] + _event.EarliestTime + 1) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime + 1) % 4 * 15:00}")</th>
     </tr>
-    @foreach (User attendee in _event.Attendees)
+    @for (int i = 0; i < _event.Attendees.Count; i++)
     {
-        string name = attendee.Name;
+        string name = _event.Attendees[i].Name;
         <tr>
-            <td style="background-color: @(_attendances[_attendeeTooltip[0]][_attendeeTooltip[1]].Contains(name) ? "#00bb00" : "#bb0000")">@name</td>
+            <td style="background-color: @(_attendances.Count == 0 ? "#555" : _attendances[_attendeeTooltip[0]][_attendeeTooltip[1]].Contains(name) ? "#00bb00" : "#bb0000")">@name</td>
         </tr>
     }
 </table>
@@ -196,7 +177,7 @@ else
     private User? _user;
 
     private bool _editingDetails;
-    private int[]? _attendeeTooltip = [0, 0];
+    private int[] _attendeeTooltip = [0, 0];
 
     // start date, start time, end date, end time
     private int[]? _selection;
