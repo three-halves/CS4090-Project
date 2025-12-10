@@ -1,32 +1,32 @@
 ﻿@page "/"
-@implements IDisposable
 @rendermode InteractiveServer
 @using Db
 @using Microsoft.EntityFrameworkCore
-@inject IDbContextFactory<DatabaseContext> DbFactory
-@inject AppAuthenticator AppAuthenticator
+@using Microsoft.EntityFrameworkCore.Storage
+@inject IDbContextFactory<DatabaseContext> _dbContextFactory
+@inject AppAuthenticator _appAuthenticator
 
 <PageTitle>Home</PageTitle>
 
-<h1>Login</h1>
 <AuthorizeView Context="Account">
     <NotAuthorized>
+        <h1>Login</h1>
         <label for="username">Username:</label>
-        <InputText name="username" type="text" style="width: 400px" @bind-Value="username"></InputText><br />
+        <InputText name="username" type="text" style="width: 400px" @bind-Value="_username"></InputText><br />
         <label for="password">Password:</label>
-        <InputText name="password" type="password" style="width: 400px" @bind-Value="password"
-            onkeyup="if (event.keyCode == 13) { login.click(); }"></InputText><br />
+        <InputText name="password" type="password" style="width: 400px" @bind-Value="_password" onkeyup="if (event.keyCode == 13) { login.click(); }"></InputText><br />
         <button id="login" @onclick="TryLogin">Login</button><br />
-        <p style="color: #f00">@error</p>
+        <p style="color: #f00">@_error</p>
     </NotAuthorized>
     <Authorized>
-        <p>Name: @user?.Name</p>
-        <p>Username: @user?.Username</p>
+        <h1>Home</h1>
+        <p>Name: @_user?.Name</p>
+        <p>Username: @_user?.Username</p>
         <button type="button" class="btn btn-primary" @onclick="TryLogout">Logout</button>
         <p>Organizing Events</p>
-        <button @onclick="CreateEvent">Create Event</button>
+        <a href="/new-event">Create Event</a>
         <table>
-            @foreach (Db.Event event_ in user?.Organizing ?? [])
+            @foreach (Event event_ in _user?.Organizing ?? [])
             {
                 <tr>
                     <td><a href="/event/@event_.Id">@event_.Title</a></td>
@@ -36,10 +36,10 @@
         </table>
         <p>Attending Events</p>
         <table>
-            @foreach (Db.Event event_ in user?.Attending ?? [])
+            @foreach (Event event_ in _user?.Attending ?? [])
             {
                 <tr>
-                    <td> <a href="/@event_.Id">@event_.Title</a></td>
+                    <td><a href="/event/@event_.Id">@event_.Title</a></td>
                 </tr>
             }
         </table>
@@ -53,37 +53,33 @@
     [CascadingParameter]
     private Task<AuthenticationState>? authenticationState { get; set; }
 
-    private string username = "";
-    private string password = "";
-    private string error = "";
-    private User? user;
-    private DatabaseContext? context;
+    private string _username = "";
+    private string _password = "";
+    private string _error = "";
+    private User? _user;
 
     protected override async Task OnInitializedAsync()
     {
-        context = await DbFactory.CreateDbContextAsync();
         await UpdateUser();
     }
 
     private async Task TryLogin()
     {
-        error = "";
-        StateHasChanged();
-        if (!(await AppAuthenticator.LoginAsync(username, AppAuthenticator.GetPasswordHash(password))))
+        if (!(await _appAuthenticator.LoginAsync(_username, AppAuthenticator.GetPasswordHash(_password))))
         {
-            error = "Invalid Username or Password";
-            StateHasChanged();
+            _error = "Invalid Username or Password";
+            await InvokeAsync(StateHasChanged);
         }
         else
         {
+            _error = "";
             await UpdateUser();
         }
     }
 
     private async Task TryLogout()
     {
-        await AppAuthenticator.LogoutAsync();
-        StateHasChanged();
+        await _appAuthenticator.LogoutAsync();
         await UpdateUser();
     }
 
@@ -92,41 +88,27 @@
         if (authenticationState != null)
         {
             var authState = await authenticationState;
-            if (context != null && authState?.User.Identity?.Name != null)
+            if (authState?.User.Identity?.Name != null)
             {
-                user = await context.Users.FindAsync(new Guid(authState.User.Identity.Name));
-                if (user != null)
+                using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+                _user = await databaseContext.Users.FindAsync(new Guid(authState.User.Identity.Name));
+                if (_user != null)
                 {
-                    await context.Entry(user).Collection(user => user.Organizing).LoadAsync();
-                    await context.Entry(user).Collection(user => user.Attending).LoadAsync();
+                    await databaseContext.Entry(_user).Collection(user => user.Organizing).LoadAsync();
+                    await databaseContext.Entry(_user).Collection(user => user.Attending).LoadAsync();
                 }
-                StateHasChanged();
+                await InvokeAsync(StateHasChanged);
             }
         }
     }
 
-    private async Task CreateEvent()
+    private async Task DeleteEvent(Event event_)
     {
-        if (context != null && user != null)
+        if (_user != null && event_.OrganizerId == _user.Id)
         {
-            await context.Events.AddAsync(new Db.Event
-            {
-                Id = new Guid(),
-                Title = "New Event",
-                OrganizerId = user.Id
-            });
-            await context.SaveChangesAsync();
+            using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+            databaseContext.Events.Remove(event_);
+            await databaseContext.SaveChangesAsync();
         }
     }
-
-    private async Task DeleteEvent(Db.Event event_)
-    {
-        if (context != null)
-        {
-            context.Events.Remove(event_);
-            await context.SaveChangesAsync();
-        }
-    }
-
-    public void Dispose() => context?.Dispose();
 }

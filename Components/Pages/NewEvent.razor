@@ -1,0 +1,107 @@
+@page "/new-event"
+@rendermode InteractiveServer
+@using Db
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DatabaseContext> _dbContextFactory
+@inject NavigationManager _navigationManager
+
+<AuthorizeView Context="Account">
+    <Authorized>
+        <label>Title</label><br>
+        <input style="width: 30%" @bind="_event.Title" type="text"><br>
+        <label>Description</label><br>
+        <textarea style="width: 30%" @bind="_event.Description"></textarea><br>
+        <label>Use days of the week</label><input @bind="_event.DaysOfTheWeek" type="checkbox"><br>
+        @if (_event.DaysOfTheWeek)
+        {
+            <table>
+                <tr>
+                    @for (int i = 0; i < 7; i++)
+                    {
+                        int j = i;
+                        <td><button @onclick="@(_ => _selectedWeekDays[j] = !_selectedWeekDays[j])" style="background-color: @(_selectedWeekDays[j] ? "green" : "gray")">@("MTWTFSS"[j])</button></td>
+                    }
+                </tr>
+            </table>
+        }
+        else
+        {
+            <table>
+                @for (int i = 0; i < _event.Dates.Count; i++)
+                {
+                    int j = i;
+                    <tr>
+                        <td><input @bind="_event.Dates[j]" type="date"></td>
+                        <td><button @onclick="@(_ => _event.Dates.RemoveAt(j))">Remove Date</button></td>
+                    </tr>
+                }
+            </table>
+            <p><input @bind="_startDate" type="date"> - <input @bind="_endDate" type="date"><button @onclick="AddDates">Add Date(s)</button></p>
+        }
+        <label>Earliest Time</label>
+        <select @bind="_event.EarliestTime">
+            @for (int i = 0; i <= 95; i++)
+            {
+                <option value="@i">@($"{i / 4:00}:{i % 4 * 15:00}")</option>
+            }
+        </select><br>
+        <label>Latest Time</label>
+        <select @bind="_event.LatestTime">
+            @for (int i = 1; i <= 96; i++)
+            {
+                <option value="@i">@($"{i / 4:00}:{i % 4 * 15:00}")</option>
+            }
+        </select><br>
+        <button style=" width: 30%" @onclick="Create">Create Event</button><br>
+        <p style="color: red">@_error</p>
+    </Authorized>
+    <NotAuthorized>
+        <h1>You must be logged in to create events.</h1>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationState { get; set; }
+    private Event _event = new();
+    private DateOnly _startDate = DateOnly.FromDateTime(DateTime.Now);
+    private DateOnly _endDate = DateOnly.FromDateTime(DateTime.Now);
+    private bool[] _selectedWeekDays = new bool[8];
+    private string _error = "";
+
+    void AddDates()
+    {
+        for (int i = _startDate.DayNumber; i <= _endDate.DayNumber; i++)
+            _event.Dates.Add(DateOnly.FromDayNumber(i));
+        // De-duplicate and sort.
+        _event.Dates = _event.Dates.Distinct().ToList();
+        _event.Dates.Sort();
+    }
+
+    async Task Create()
+    {
+        if (authenticationState == null) return;
+        var authState = await authenticationState;
+        if (authState?.User.Identity?.Name == null) return;
+        if (_event.Dates.Count < 1)
+        {
+            _error = "Add at least one date.";
+            return;
+        }
+        if (_event.EarliestTime >= _event.LatestTime)
+        {
+            _error = "Earliest time must be earlier than latest time.";
+            return;
+        }
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        if (_event.DaysOfTheWeek)
+        {
+            _event.Dates.Clear();
+            for (int i = 0; i < 7; i++) if (_selectedWeekDays[i]) _event.Dates.Add(DateOnly.FromDayNumber(i));
+        }
+        _event.OrganizerId = new Guid(authState.User.Identity.Name);
+        await databaseContext.Events.AddAsync(_event);
+        await databaseContext.SaveChangesAsync();
+        _navigationManager.NavigateTo($"/event/{_event.Id}");
+    }
+}

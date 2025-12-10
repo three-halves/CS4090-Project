@@ -1,0 +1,377 @@
+@page "/event/{ID:guid}"
+@rendermode InteractiveServer
+@using Db
+@using System
+@using Microsoft.EntityFrameworkCore
+@using System.Globalization
+@using Microsoft.EntityFrameworkCore.Storage
+@using SQLitePCL
+@using System.ComponentModel.Design
+@using System.ComponentModel
+@inject IDbContextFactory<DatabaseContext> _dbContextFactory
+@inject NavigationManager _navigationManager
+
+<style>
+    th,
+    td {
+        border: 1px solid white;
+        border-collapse: collapse;
+    }
+</style>
+
+@if (_user?.Id == _event.OrganizerId)
+{
+    @if (_editingDetails)
+    {
+        <input style="width: 30%" @bind="_event.Title" type="text">
+        <br />
+        <textarea style="width: 30%" @bind="_event.Description"></textarea>
+        <br />
+        <button style="width: 30%" @onclick="SaveDetails">Save</button>
+    }
+    else
+    {
+        <h1>@(_event.Title)</h1>
+        <p>@(_event.Description)</p>
+        <button @onclick="_ => _editingDetails = true">Edit</button>
+    }
+}
+else
+{
+    <h1>@(_event.Title)</h1>
+    <p>@(_event.Description)</p>
+}
+@if (_user == null)
+{
+    <p><a href="/">Login</a> to submit availability for this event. </p>
+}
+else
+{
+    <table>
+        <tr>
+            <th></th>
+            @for (int date = 0; date < _event.Dates.Count; date++)
+            {
+                <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
+            }
+        </tr>
+        @if (!_event.DaysOfTheWeek)
+        {
+            <tr>
+                <th></th>
+                @for (int date = 0; date < _event.Dates.Count; date++)
+                {
+                    <th>@(_event.Dates[date].ToString("MM-dd"))</th>
+                }
+            </tr>
+        }
+        @for (int time = (int)(_event.EarliestTime - _event.EarliestTime % 4); time < (int)_event.EarliestTime; time++)
+        {
+            <tr>
+                @if (time % 4 == 0)
+                {
+                    <td rowspan="4">@($"{_event.EarliestTime / 4:00}00")</td>
+                }
+                @for (int date = 0; date < _event.Dates.Count; date++)
+                {
+                    <td></td>
+                }
+            </tr>
+        }
+        @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime; time_++)
+        {
+            <tr>
+                @if (time_ % 4 == 0)
+                {
+                    <td rowspan="4">@($"{time_ / 4:00}00")</td>
+                }
+                @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
+                {
+                    int time = time_;
+                    int date = date_;
+                    <td @onmousedown:preventDefault="true" @onmouseenter:preventDefault="true" @onmouseup:preventDefault="true" @onmousedown="@(async _ => await MouseDown(date, time))" @onmouseenter="@(async _ => await MouseEnter(date, time))" @onmouseup="MouseUp" style="background-color: @((InSelection(date, time) || (_attendance != null && (_attendance.Availability[date] & (new UInt128(0, 1) << time)) != 0) && !InDeselection(date, time)) ? "#00bb00" : "#bb0000")"></td>
+                }
+            </tr>
+        }
+        @if (_event.LatestTime % 4 != 0)
+        {
+            @for (uint i = 0; i < (4 - (_event.LatestTime % 4)); i++)
+            {
+                <tr>
+                    @for (int date = 0; date < _event.Dates.Count; date++)
+                    {
+                        <td></td>
+                    }
+                </tr>
+            }
+        }
+    </table>
+    @if (_attendance != null)
+    {
+        <button @onclick="DeleteUserAvailability">Delete My Availability</button>
+    }
+}
+<table>
+    <tr>
+        <th></th>
+        @for (int date = 0; date < _event.Dates.Count; date++)
+        {
+            <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
+        }
+    </tr>
+    @if (!_event.DaysOfTheWeek)
+    {
+        <tr>
+            <th></th>
+            @for (int date = 0; date < _event.Dates.Count; date++)
+            {
+                <th>@(_event.Dates[date].ToString("MM-dd"))</th>
+            }
+        </tr>
+    }
+    @for (int time = (int)(_event.EarliestTime - _event.EarliestTime % 4); time < (int)_event.EarliestTime; time++)
+    {
+        <tr>
+            @if (time % 4 == 0)
+            {
+                <td rowspan="4">@($"{_event.EarliestTime / 4:00}00")</td>
+            }
+            @for (int date = 0; date < _event.Dates.Count; date++)
+            {
+                <td></td>
+            }
+        </tr>
+    }
+    @for (int time = (int)_event.EarliestTime; time < (int)_event.LatestTime; time++)
+    {
+        <tr>
+            @if (time % 4 == 0)
+            {
+                <td rowspan="4">@($"{time / 4:00}00")</td>
+            }
+            @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
+            {
+                int timeOffset = time - (int)_event.EarliestTime;
+                int date = date_;
+                <td @onmouseenter="@(_ => _attendeeTooltip = [date, timeOffset])" style="background-color: color-mix(in oklab, #fff, #090 @(_maxAttendeesAtOnce > 0 ? _attendances[date][timeOffset].Count * 100d / _maxAttendeesAtOnce : 0)%)"></td>
+            }
+        </tr>
+    }
+    @if (_event.LatestTime % 4 != 0)
+    {
+        @for (uint i = 0; i < (4 - (_event.LatestTime % 4)); i++)
+        {
+            <tr>
+                @for (int date = 0; date < _event.Dates.Count; date++)
+                {
+                    <td></td>
+                }
+            </tr>
+        }
+    }
+</table>
+<table>
+    <tr>
+        <th>@($"{_event.Dates[_attendeeTooltip[0]].ToString("yyyy-MM-dd")} {(_attendeeTooltip[1] + _event.EarliestTime) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime) % 4 * 15:00} - {(_attendeeTooltip[1] + _event.EarliestTime + 1) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime + 1) % 4 * 15:00}")</th>
+    </tr>
+    @foreach (User attendee in _event.Attendees)
+    {
+        string name = attendee.Name;
+        <tr>
+            <td style="background-color: @(_attendances[_attendeeTooltip[0]][_attendeeTooltip[1]].Contains(name) ? "#00bb00" : "#bb0000")">@name</td>
+        </tr>
+    }
+</table>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationState { get; set; }
+    [Parameter]
+    public Guid ID { get; set; }
+
+    private Event _event = new();
+    private List<List<List<string>>> _attendances = [];
+    private int _maxAttendeesAtOnce = 0;
+    private Attendance? _attendance;
+    private User? _user;
+
+    private bool _editingDetails;
+    private int[]? _attendeeTooltip = [0, 0];
+
+    // start date, start time, end date, end time
+    private int[]? _selection;
+    private bool _selecting = true;
+
+    private async Task MouseDown(int date, int time)
+    {
+        if (_user == null) return;
+        if (_selection != null)
+        {
+            await MouseUp(); return;
+        }
+        // Select if first cell is deselected (which is always the case if the user isn't attending yet) and deselect if first cell is selected.
+        _selecting = _attendance == null || (_attendance.Availability[date] & (UInt128.One << time)) == 0;
+        _selection = [date, time, date, time];
+    }
+
+    private async Task MouseEnter(int date, int time)
+    {
+        if (_user == null || _selection == null) return;
+        _selection[2] = date;
+        _selection[3] = time;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task MouseUp()
+    {
+        if (_user == null || _selection == null) return;
+        if (_attendance == null)
+        {
+            // User is not currently attending, add them to this event.
+            _attendance = new Attendance
+            {
+                UserId = _user.Id,
+                EventId = _event.Id,
+                Availability = Enumerable.Repeat<UInt128>(0, _event.Dates.Count).ToList()
+            };
+        }
+        int minDate = Math.Min(_selection[0], _selection[2]);
+        int maxDate = Math.Max(_selection[0], _selection[2]);
+        int minTime = Math.Min(_selection[1], _selection[3]);
+        int maxTime = Math.Max(_selection[1], _selection[3]);
+        if (_selecting)
+        {
+            // Set bits in selection.
+            for (int date = minDate; date <= maxDate; date++)
+            {
+                for (int time = minTime; time <= maxTime; time++)
+                {
+                    _attendance.Availability[date] |= UInt128.One << time;
+                }
+            }
+        }
+        else
+        {
+            // Clear bits in selection.
+            for (int date = minDate; date <= maxDate; date++)
+            {
+                for (int time = minTime; time <= maxTime; time++)
+                {
+                    _attendance.Availability[date] &= ~(UInt128.One << time);
+                }
+            }
+        }
+        _selection = null;
+        await SaveAttendance();
+    }
+
+    private bool InSelection(int date, int time)
+    {
+        if (_selection == null || !_selecting) return false;
+        int minDate = Math.Min(_selection[0], _selection[2]);
+        int maxDate = Math.Max(_selection[0], _selection[2]);
+        int minTime = Math.Min(_selection[1], _selection[3]);
+        int maxTime = Math.Max(_selection[1], _selection[3]);
+        return minDate <= date && date <= maxDate && minTime <= time && time <= maxTime;
+    }
+
+    private bool InDeselection(int date, int time)
+    {
+        if (_selection == null || _selecting) return false;
+        int minDate = Math.Min(_selection[0], _selection[2]);
+        int maxDate = Math.Max(_selection[0], _selection[2]);
+        int minTime = Math.Min(_selection[1], _selection[3]);
+        int maxTime = Math.Max(_selection[1], _selection[3]);
+        return minDate <= date && date <= maxDate && minTime <= time && time <= maxTime;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        Event? event_ = await databaseContext.Events.FindAsync(ID);
+        if (event_ == null)
+        {
+            _navigationManager.NavigateTo("/not-found", true);
+            return;
+        }
+
+        await databaseContext.Entry(event_).Collection(event_ => event_.Attendees).LoadAsync();
+        _event = event_;
+
+        if (authenticationState != null)
+        {
+            var authState = await authenticationState;
+            if (authState?.User.Identity?.Name != null)
+            {
+                _user = await databaseContext.Users.FindAsync(new Guid(authState.User.Identity.Name));
+                if (_user != null)
+                    _attendance = await databaseContext.Attendance.FindAsync(_event.Id, _user.Id);
+            }
+        }
+
+        await UpdateAttendances();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UpdateAttendances()
+    {
+        Console.Write(String.Join(", ", _attendance?.Availability ?? []));
+        _attendances.Clear();
+        for (int date = 0; date < _event.Dates.Count; date++)
+        {
+            _attendances.Add([]);
+            for (int timeOffset = 0; timeOffset < _event.LatestTime - _event.EarliestTime; timeOffset++)
+                _attendances[date].Add([]);
+        }
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        foreach (User user in _event.Attendees)
+        {
+            Attendance? attendance_ = await databaseContext.Attendance.FindAsync(_event.Id, user.Id);
+            if (attendance_ == null) continue;
+            for (int date = 0; date < _event.Dates.Count; date++)
+                for (int timeOffset = 0; timeOffset < _event.LatestTime - _event.EarliestTime; timeOffset++)
+                    if ((attendance_.Availability[date] & (UInt128.One << (timeOffset + (int)_event.EarliestTime))) != 0)
+                        _attendances[date][timeOffset].Add(user.Name);
+        }
+        _maxAttendeesAtOnce = _attendances.Select(x => x.Select(y => y.Count).Max()).Max();
+    }
+
+    private async Task SaveAttendance()
+    {
+        if (_attendance == null) return;
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        Attendance? attendance = await databaseContext.Attendance.FindAsync(_attendance.EventId, _attendance.UserId);
+        if (attendance == null)
+            await databaseContext.Attendance.AddAsync(_attendance);
+        else
+        {
+            attendance.Availability = _attendance.Availability;
+            databaseContext.Attendance.Update(attendance);
+        }
+        await databaseContext.SaveChangesAsync();
+        await UpdateAttendances();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void DeleteUserAvailability()
+    {
+        if (_attendance == null) return;
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        databaseContext.Attendance.Remove(_attendance);
+        await databaseContext.SaveChangesAsync();
+        _attendance = null;
+        await UpdateAttendances();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveDetails()
+    {
+        if (_user?.Id == _event.OrganizerId)
+        {
+            using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+            databaseContext.Update(_event);
+            await databaseContext.SaveChangesAsync();
+            _editingDetails = false;
+        }
+    }
+}
