@@ -63,12 +63,12 @@ public class AppAuthenticator(ProtectedLocalStorage protectedLocalStorage, Datab
 
     public async Task<bool> CreateLoginAsync(string username, string passwordHash)
     {
-        if (context.Users.FirstOrDefault(u => username == u.Username) != null) return false;
+        if (username == "" || context.Users.FirstOrDefault(u => username == u.Username) != null) return false;
 
         await context.Users.AddAsync(new User
         {
             Id = Guid.NewGuid(),
-            Name = "",
+            Name = username,
             Username = username,
             PasswordHash = passwordHash
         });

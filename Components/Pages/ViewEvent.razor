@@ -1,13 +1,7 @@
 @page "/event/{ID:guid}"
 @rendermode InteractiveServer
 @using Db
-@using System
 @using Microsoft.EntityFrameworkCore
-@using System.Globalization
-@using Microsoft.EntityFrameworkCore.Storage
-@using SQLitePCL
-@using System.ComponentModel.Design
-@using System.ComponentModel
 @inject IDbContextFactory<DatabaseContext> _dbContextFactory
 @inject NavigationManager _navigationManager
 
@@ -21,51 +15,37 @@
 
 @if (_user?.Id == _event.OrganizerId)
 {
-    @if (_editingDetails)
-    {
-        <input style="width: 30%" @bind="_event.Title" type="text">
-        <br>
-        <textarea style="width: 30%" @bind="_event.Description"></textarea>
-        <br>
-        <button style="width: 30%" @onclick="SaveDetails">Save</button>
-    }
-    else
-    {
-        <h1>@(_event.Title)</h1>
-        <p>@(_event.Description)</p>
-        <button @onclick="_ => _editingDetails = true">Edit</button>
-    }
+    <input style="width: 30%" @bind="_event.Title" type="text">
+    <br>
+    <textarea style="width: 30%" @bind="_event.Description"></textarea>
+    <br>
+    <select style="width: 30%" @bind="_event.Privacy">
+        <option value="@Privacy.PRIVATE">Availability submission is only visible to the organizer.</option>
+        <option value="@Privacy.PUBLIC_CUMULATIVE">Availability submission is visible to the organizer and the number of people available at each time is public.</option>
+        <option value="@Privacy.PUBLIC_IDENTIFIED">Availability submission is public.</option>
+    </select>
+    <br>
+    <button style="width: 30%" @onclick="SaveDetails">Save</button>
 }
 else
 {
     <h1>@(_event.Title)</h1>
     <p>@(_event.Description)</p>
+    <p>Availability submission is @(_event.Privacy == Privacy.PRIVATE ? "only visible to the organizer" : _event.Privacy == Privacy.PUBLIC_CUMULATIVE ? "visible to the organizer and the number of people available at each time is public" : "public").</p>
+}
+@if (_event.Organizer != null)
+{
+    <p>Organizer: @(_event.Organizer.Name)</p>
 }
 @if (_user == null)
 {
     <p><a href="/">Login</a> to submit availability for this event. </p>
 }
-<table>
-    @* Year / Day of Week *@
-    <tr>
-        <th></th>
-        @* Attendance Entry *@
-        @if (_user != null)
-        {
-            @for (int date = 0; date < _event.Dates.Count; date++)
-            {
-                <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
-            }
-        }
-        @* Attendance View *@
-        @for (int date = 0; date < _event.Dates.Count; date++)
-        {
-            <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
-        }
-    </tr>
-    @* Month-Day *@
-    @if (!_event.DaysOfTheWeek)
-    {
+
+@if (_user != null || _user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE)
+{
+    <table>
+        @* Year / Day of Week *@
         <tr>
             <th></th>
             @* Attendance Entry *@
@@ -73,96 +53,134 @@ else
             {
                 @for (int date = 0; date < _event.Dates.Count; date++)
                 {
-                    <th>@(_event.Dates[date].ToString("MM-dd"))</th>
+                    <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
                 }
             }
             @* Attendance View *@
-            @for (int date = 0; date < _event.Dates.Count; date++)
+            @if (_user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE)
             {
-                <th>@(_event.Dates[date].ToString("MM-dd"))</th>
-            }
-        </tr>
-    }
-    @* Pad first hour to 4 rows. *@
-    @for (int time = (int)(_event.EarliestTime - _event.EarliestTime % 4); time < (int)_event.EarliestTime; time++)
-    {
-        <tr>
-            @if (time % 4 == 0)
-            {
-                <td rowspan="4">@($"{_event.EarliestTime / 4:00}00")</td>
-            }
-            @for (int date = 0; date < _event.Dates.Count; date++)
-            {
-                @if (_user != null)
+                @for (int date = 0; date < _event.Dates.Count; date++)
                 {
-                    <td></td>
-                }
-                <td></td>
-            }
-        </tr>
-    }
-    @* For each time the event may occur... *@
-    @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime; time_++)
-    {
-        <tr>
-            @* Hour *@
-            @if (time_ % 4 == 0)
-            {
-                <td rowspan="4">@($"{time_ / 4:00}00")</td>
-            }
-            @* Attendance Entry *@
-            @if (_user != null)
-            {
-                @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
-                {
-                    int time = time_;
-                    int date = date_;
-                    <td @onmousedown:preventDefault="true" @onmouseenter:preventDefault="true" @onmouseup:preventDefault="true" @onmousedown="@(async _ => await MouseDown(date, time))" @onmouseenter="@(async _ => await MouseEnter(date, time))" @onmouseup="MouseUp" style="background-color: @((InSelection(date, time) || (_attendance != null && (_attendance.Availability[date] & (new UInt128(0, 1) << time)) != 0) && !InDeselection(date, time)) ? "#00bb00" : "#bb0000")"></td>
+                    <th>@(_event.DaysOfTheWeek ? "MTWTFSS"[_event.Dates[date].DayNumber] : _event.Dates[date].ToString("yyyy"))</th>
                 }
             }
-            @* Attendance View *@
-            @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
-            {
-                int timeOffset = time_ - (int)_event.EarliestTime;
-                int date = date_;
-                <td @onmouseenter="@(_ => _attendeeTooltip = [date, timeOffset])" style="background-color: color-mix(in oklab, #fff, #090 @(_maxAttendeesAtOnce > 0 ? _attendances[date][timeOffset].Count * 100d / _maxAttendeesAtOnce : 0)%)"></td>
-            }
         </tr>
-    }
-    @* Pad last hour to 4 rows. *@
-    @if (_event.LatestTime % 4 != 0)
-    {
-        @for (uint i = 0; i < (4 - (_event.LatestTime % 4)); i++)
+        @* Month-Day *@
+        @if (!_event.DaysOfTheWeek)
         {
             <tr>
+                <th></th>
+                @* Attendance Entry *@
+                @if (_user != null)
+                {
+                    @for (int date = 0; date < _event.Dates.Count; date++)
+                    {
+                        <th>@(_event.Dates[date].ToString("MM-dd"))</th>
+                    }
+                }
+                @* Attendance View *@
+                @if (_user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE)
+                {
+                    @for (int date = 0; date < _event.Dates.Count; date++)
+                    {
+                        <th>@(_event.Dates[date].ToString("MM-dd"))</th>
+                    }
+                }
+            </tr>
+        }
+        @* Pad first hour to 4 rows. *@
+        @for (int time = (int)(_event.EarliestTime - _event.EarliestTime % 4); time < (int)_event.EarliestTime; time++)
+        {
+            <tr>
+                @if (time % 4 == 0)
+                {
+                    <td rowspan="4">@($"{_event.EarliestTime / 4:00}00")</td>
+                }
                 @for (int date = 0; date < _event.Dates.Count; date++)
                 {
                     @if (_user != null)
                     {
                         <td></td>
                     }
-                    <td></td>
+                    @if (_user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE)
+                    {
+                        <td></td>
+                    }
                 }
             </tr>
         }
-    }
-</table>
+        @* For each time the event may occur... *@
+        @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime; time_++)
+        {
+            <tr>
+                @* Hour *@
+                @if (time_ % 4 == 0)
+                {
+                    <td rowspan="4">@($"{time_ / 4:00}00")</td>
+                }
+                @* Attendance Entry *@
+                @if (_user != null)
+                {
+                    @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
+                    {
+                        int time = time_;
+                        int date = date_;
+                        <td @onmousedown:preventDefault="true" @onmouseenter:preventDefault="true" @onmouseup:preventDefault="true" @onmousedown="@(async _ => await MouseDown(date, time))" @onmouseenter="@(async _ => await MouseEnter(date, time))" @onmouseup="MouseUp" style="background-color: @((InSelection(date, time) || (_attendance != null && (_attendance.Availability[date] & (new UInt128(0, 1) << time)) != 0) && !InDeselection(date, time)) ? "#00bb00" : "#bb0000")"></td>
+                    }
+                }
+                @* Attendance View *@
+                @if (_user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE)
+                {
+                    @for (int date_ = 0; date_ < _event.Dates.Count; date_++)
+                    {
+                        int timeOffset = time_ - (int)_event.EarliestTime;
+                        int date = date_;
+                        <td @onmouseenter="@(_ => _attendeeTooltip = [date, timeOffset])" style="background-color: color-mix(in oklab, #fff, #090 @(_maxAttendeesAtOnce > 0 ? _attendances[date][timeOffset].Count * 100d / _maxAttendeesAtOnce : 0)%)"></td>
+                    }
+                }
+            </tr>
+        }
+        @* Pad last hour to 4 rows. *@
+        @if (_event.LatestTime % 4 != 0)
+        {
+            @for (uint i = 0; i < (4 - (_event.LatestTime % 4)); i++)
+            {
+                <tr>
+                    @for (int date = 0; date < _event.Dates.Count; date++)
+                    {
+                        @if (_user != null)
+                        {
+                            <td></td>
+                        }
+                        @if (_user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE)
+                        {
+                            <td></td>
+                        }
+                    }
+                </tr>
+            }
+        }
+    </table>
+}
 @if (_attendance != null)
 {
     <button @onclick="DeleteUserAvailability">Delete My Availability</button>
 }
-<table>
-    <tr>
-        <th>@($"{_event.Dates[_attendeeTooltip[0]].ToString("yyyy-MM-dd")} {(_attendeeTooltip[1] + _event.EarliestTime) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime) % 4 * 15:00} - {(_attendeeTooltip[1] + _event.EarliestTime + 1) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime + 1) % 4 * 15:00}")</th>
-    </tr>
-    @for (int i = 0; i < _event.Attendees.Count; i++)
-    {
-        string name = _event.Attendees[i].Name;
+@if (_user?.Id == _event.OrganizerId || _event.Privacy == Privacy.PUBLIC_IDENTIFIED)
+{
+    <table>
         <tr>
-            <td style="background-color: @(_attendances.Count == 0 ? "#555" : _attendances[_attendeeTooltip[0]][_attendeeTooltip[1]].Contains(name) ? "#00bb00" : "#bb0000")">@name</td>
+            <th>@($"{_event.Dates[_attendeeTooltip[0]].ToString("yyyy-MM-dd")} {(_attendeeTooltip[1] + _event.EarliestTime) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime) % 4 * 15:00} - {(_attendeeTooltip[1] + _event.EarliestTime + 1) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime + 1) % 4 * 15:00}")</th>
         </tr>
-    }
-</table>
+        @for (int i = 0; i < _event.Attendees.Count; i++)
+        {
+            string name = _event.Attendees[i].Name;
+            <tr>
+                <td style="background-color: @(_attendances.Count == 0 ? "#555" : _attendances[_attendeeTooltip[0]][_attendeeTooltip[1]].Contains(name) ? "#00bb00" : "#bb0000")">@name</td>
+            </tr>
+        }
+    </table>
+}
 
 @code {
     [CascadingParameter]
@@ -176,7 +194,6 @@ else
     private Attendance? _attendance;
     private User? _user;
 
-    private bool _editingDetails;
     private int[] _attendeeTooltip = [0, 0];
 
     // start date, start time, end date, end time
@@ -277,6 +294,7 @@ else
         }
 
         await databaseContext.Entry(event_).Collection(event_ => event_.Attendees).LoadAsync();
+        await databaseContext.Entry(event_).Reference(event_ => event_.Organizer).LoadAsync();
         _event = event_;
 
         if (authenticationState != null)
@@ -312,7 +330,7 @@ else
             for (int date = 0; date < _event.Dates.Count; date++)
                 for (int timeOffset = 0; timeOffset < _event.LatestTime - _event.EarliestTime; timeOffset++)
                     if ((attendance_.Availability[date] & (UInt128.One << (timeOffset + (int)_event.EarliestTime))) != 0)
-                        _attendances[date][timeOffset].Add(user.Name);
+                        _attendances[date][timeOffset].Add(_user?.Id == _event.OrganizerId || _event.Privacy == Privacy.PUBLIC_IDENTIFIED ? user.Name : "");
         }
         _maxAttendeesAtOnce = _attendances.Select(x => x.Select(y => y.Count).Max()).Max();
     }
@@ -352,7 +370,6 @@ else
             using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
             databaseContext.Update(_event);
             await databaseContext.SaveChangesAsync();
-            _editingDetails = false;
         }
     }
 }
