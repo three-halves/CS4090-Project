@@ -61,6 +61,22 @@ public class AppAuthenticator(ProtectedLocalStorage protectedLocalStorage, Datab
         return false;
     }
 
+    public async Task<bool> CreateLoginAsync(string username, string passwordHash)
+    {
+        if (context.Users.FirstOrDefault(u => username == u.Username) != null) return false;
+
+        await context.Users.AddAsync(new User
+        {
+            Id = Guid.NewGuid(),
+            Name = "",
+            Username = username,
+            PasswordHash = passwordHash
+        });
+        await context.SaveChangesAsync();
+
+        return true;
+    }
+
     public async Task LogoutAsync()
     {
         await protectedLocalStorage.DeleteAsync("identity");

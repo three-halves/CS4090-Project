@@ -12,37 +12,41 @@
     <NotAuthorized>
         <h1>Login</h1>
         <label for="username">Username:</label>
-        <InputText name="username" type="text" style="width: 400px" @bind-Value="_username"></InputText><br />
+        <input name="username" type="text" style="width: 400px" @bind="_username"><br>
         <label for="password">Password:</label>
-        <InputText name="password" type="password" style="width: 400px" @bind-Value="_password" onkeyup="if (event.keyCode == 13) { login.click(); }"></InputText><br />
-        <button id="login" @onclick="TryLogin">Login</button><br />
+        <input name="password" type="password" style="width: 400px" @bind="_password" onkeyup="if (event.keyCode == 13) { login.click(); }"><br>
+        <button id="login" @onclick="TryLogin">Login</button><br>
+        <button id="login" @onclick="CreateAccount">Create Account</button><br>
         <p style="color: #f00">@_error</p>
     </NotAuthorized>
     <Authorized>
-        <h1>Home</h1>
-        <p>Name: @_user?.Name</p>
-        <p>Username: @_user?.Username</p>
-        <button type="button" class="btn btn-primary" @onclick="TryLogout">Logout</button>
-        <p>Organizing Events</p>
-        <a href="/new-event">Create Event</a>
-        <table>
-            @foreach (Event event_ in _user?.Organizing ?? [])
-            {
-                <tr>
-                    <td><a href="/event/@event_.Id">@event_.Title</a></td>
-                    <td><button @onclick="@(async () => await DeleteEvent(event_))">Delete</button></td>
-                </tr>
-            }
-        </table>
-        <p>Attending Events</p>
-        <table>
-            @foreach (Event event_ in _user?.Attending ?? [])
-            {
-                <tr>
-                    <td><a href="/event/@event_.Id">@event_.Title</a></td>
-                </tr>
-            }
-        </table>
+        @if (_user != null)
+        {
+            <h1>Home</h1>
+            <p>Name: <input @bind=_user.Name type="text" style="width: 400px"><button @onclick="UpdateName">Update</button></p>
+            <p>Username: @_user.Username</p>
+            <button type="button" class="btn btn-primary" @onclick="TryLogout">Logout</button>
+            <p>Organizing Events</p>
+            <a href="/new-event">Create Event</a>
+            <table>
+                @foreach (Event event_ in _user.Organizing)
+                {
+                    <tr>
+                        <td><a href="/event/@event_.Id">@event_.Title</a></td>
+                        <td><button @onclick="@(async () => await DeleteEvent(event_))">Delete</button></td>
+                    </tr>
+                }
+            </table>
+            <p>Attending Events</p>
+            <table>
+                @foreach (Event event_ in _user.Attending)
+                {
+                    <tr>
+                        <td><a href="/event/@event_.Id">@event_.Title</a></td>
+                    </tr>
+                }
+            </table>
+        }
     </Authorized>
     <Authorizing>
         <p>Authorizing in process...</p>
@@ -83,6 +87,12 @@
         await UpdateUser();
     }
 
+    private async Task CreateAccount()
+    {
+        if (await _appAuthenticator.CreateLoginAsync(_username, AppAuthenticator.GetPasswordHash(_password))) await TryLogin();
+        else _error = "Username in Use";
+    }
+
     private async Task UpdateUser()
     {
         if (authenticationState != null)
@@ -100,6 +110,14 @@
                 await InvokeAsync(StateHasChanged);
             }
         }
+    }
+
+    private async Task UpdateName()
+    {
+        if (_user == null) return;
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        databaseContext.Update(_user);
+        await databaseContext.SaveChangesAsync();
     }
 
     private async Task DeleteEvent(Event event_)

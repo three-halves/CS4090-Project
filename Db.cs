@@ -40,43 +40,6 @@ namespace Db
                         c => c.ToList()
                     )
                 );
-            modelBuilder.Entity<User>().HasData([new User
-            {
-                Id = Guid.Parse("fc771b9e-2a04-42a6-b73a-714d6ddc3feb"),
-                Username = "Test Organizer",
-                Name = "Test Organizer",
-                PasswordHash = AppAuthenticator.GetPasswordHash("")
-            }, new User {
-                Id = Guid.Parse("b97af242-5f11-4880-a4db-24d0f2c9d930"),
-                Username = "Test Attendee 1",
-                Name = "Test Attendee 1",
-                PasswordHash = AppAuthenticator.GetPasswordHash("")
-            }, new User {
-                Id = Guid.Parse("0caa1846-397c-435b-abce-46509cb6dc48"),
-                Username = "Test Attendee 2",
-                Name = "Test Attendee 2",
-                PasswordHash = AppAuthenticator.GetPasswordHash("")
-            }]);
-            /* modelBuilder.Entity<Event>().HasData(new Event
-            {
-                Id = Guid.Parse("4ec07ab7-5385-475c-b727-3bf5beda74ed"),
-                Title = "Test Event",
-                Description = "Test Description",
-                DaysOfTheWeek = false,
-                Dates = [new(2025, 12, 20), new(2025, 12, 22), new(2026, 1, 10)],
-                EarliestTime = 10,
-                LatestTime = 90,
-                OrganizerId = Guid.Parse("fc771b9e-2a04-42a6-b73a-714d6ddc3feb")
-            }); */
-            /* modelBuilder.Entity<Attendance>().HasData([new Attendance {
-                UserId = Guid.Parse("b97af242-5f11-4880-a4db-24d0f2c9d930"),
-                EventId = Guid.Parse("4ec07ab7-5385-475c-b727-3bf5beda74ed"),
-                Availability = [new UInt128(0xb20b026729df2b6du, 0xd5c7155713273cd5u), new UInt128(0xa6cbb129d9fa306fu, 0x6596df69b65ae525u), new UInt128(0xdd03216216389d6cu, 0x4de9abe7903ee833u)]
-            }, new Attendance {
-                UserId = Guid.Parse("b97af242-5f11-4880-a4db-24d0f2c9d930"),
-                EventId = Guid.Parse("4ec07ab7-5385-475c-b727-3bf5beda74ed"),
-                Availability = [new UInt128(0x7e4d774ba94f3c3cu ,0x048ffbb51bcac59au), new UInt128(0x3a475a9a3af3858bu, 0xfd4305cb1a131cdu), new UInt128(0x3d4a19a8a29449eeu ,0x6a554d93abb45d14u)]
-            }]); */
         }
     }
 
