@@ -51,7 +51,7 @@
         if (_event.DaysOfTheWeek)
         {
             <label for="final-day-select">Day: </label>
-            <select id="final-day-select" @bind=@selectedFinalDay>
+            <select id="final-day-select" @bind=@_selectedFinalDay>
                 <option value="null">Choose...</option>
                 @foreach (DateOnly day in _event.Dates)
                 {
@@ -61,7 +61,7 @@
         }
         @* Final Time Selectors *@
         <label for="final-start-time-select">Start Time: </label>
-        <select id="final-start-time-select" @bind=@selectedFinalStartTime>
+        <select id="final-start-time-select" @bind=@_selectedFinalStartTime>
             <option value=@(-1)>Choose...</option>
             @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime + 1; time_++)
             {
@@ -70,7 +70,7 @@
         </select>
 
         <label for="final-end-time-select">End Time: </label>
-        <select id="final-start-time-select" @bind=@selectedFinalEndTime>
+        <select id="final-start-time-select" @bind=@_selectedFinalEndTime>
             <option value=@(-1)>Choose...</option>
             @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime + 1; time_++)
             {
@@ -78,7 +78,7 @@
             }
         </select>
 
-        @if (selectedFinalStartTime < selectedFinalEndTime && selectedFinalEndTime != -1 && selectedFinalStartTime != -1 && selectedFinalDay != null)
+        @if (_selectedFinalStartTime < _selectedFinalEndTime && _selectedFinalEndTime != -1 && _selectedFinalStartTime != -1 && _selectedFinalDay != null)
         {
             <button @onclick="FinalizeTime" >Finalize</button>
         }
@@ -255,6 +255,27 @@ else
     @if(_user?.Id == _event.OrganizerId)
     {
         <button @onclick="UnfinalizeTime">Un-finalize Event</button>
+        @* Confirmed Participation table *@
+        <h3>Confirmed Participation</h3>
+        <table>
+            <tr>
+                <th>Attendee</th>
+                <th>Participation</th>
+            </tr>
+            @foreach (var kvp in _confirmationStatuses)
+            {
+                <tr>
+                    <td>@kvp.Key.Name</td>
+                    <td>@(kvp.Value ? "Confirmed" : "Unconfirmed")</td>   
+                </tr>
+            }
+        </table>
+    }
+    @* Attendees who marked availability *@
+    else if (_attendance != null)
+    {
+        <p>@(_attendance.ParticipationConfirmed ? "You have confirmed your participation." : "You have not confirmed your participation.")</p>
+        <button onclick=@(() => SetParticipationConfirmation(!_attendance.ParticipationConfirmed))> @(_attendance.ParticipationConfirmed ? "Unconfirm" : "Confirm")</button>
     }
 }
 
@@ -279,9 +300,11 @@ else
     private double _searchDuration = 1.0;
 
     // Currently selected options for organizer's finalized time
-    private int selectedFinalEndTime = -1;
-    private int selectedFinalStartTime = -1;
-    private DateOnly? selectedFinalDay = null;
+    private int _selectedFinalEndTime = -1;
+    private int _selectedFinalStartTime = -1;
+    private DateOnly? _selectedFinalDay = null;
+
+    private Dictionary<User, bool> _confirmationStatuses = new();
 
     private async Task MouseDown(int date, int time)
     {
@@ -390,6 +413,11 @@ else
                     _attendance = await databaseContext.Attendance.FindAsync(_event.Id, _user.Id);
             }
         }
+
+        _confirmationStatuses = databaseContext.Attendance
+            .Where(a => a.EventId == _event.Id)
+            .Join(databaseContext.Users, a => a.UserId, u => u.Id, (a, u) => new {_Attendance = a, _User = u})
+            .ToDictionary( x => x._User, x => x._Attendance.ParticipationConfirmed);
 
         await UpdateAttendances();
         await InvokeAsync(StateHasChanged);
@@ -514,13 +542,13 @@ else
 
         // Form datetime objects from selections
         DateTime finalizedStart = new DateTime(
-            selectedFinalDay!.Value, 
-            TimeOnly.MinValue.AddMinutes(selectedFinalStartTime * 15)
+            _selectedFinalDay!.Value, 
+            TimeOnly.MinValue.AddMinutes(_selectedFinalStartTime * 15)
         );
 
         DateTime finalizedEnd = new DateTime(
-            selectedFinalDay!.Value, 
-            TimeOnly.MinValue.AddMinutes(selectedFinalEndTime * 15)
+            _selectedFinalDay!.Value, 
+            TimeOnly.MinValue.AddMinutes(_selectedFinalEndTime * 15)
         );
 
         // Update DB entries
@@ -544,5 +572,18 @@ else
         await databaseContext.SaveChangesAsync();
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async void SetParticipationConfirmation(bool isConfirmed)
+    {
+        if (_attendance != null)
+        {
+            _attendance.ParticipationConfirmed = isConfirmed;
+            using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+            databaseContext.Update(_attendance);
+            await databaseContext.SaveChangesAsync();
+
+            await InvokeAsync(StateHasChanged);
+        }
     }
 }

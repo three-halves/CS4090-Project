@@ -203,6 +203,8 @@ namespace Db
         public Guid UserId { get; set; }
         // List of bitmasks for each date where the least-significant bit is the earliest time.
         public List<UInt128> Availability { get; set; } = [];
+        // Confirm participation after schedule is finalized
+        public bool ParticipationConfirmed { get; set; } = false;
     }
 
     public enum Privacy
