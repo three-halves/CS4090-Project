@@ -14,6 +14,7 @@
     }
 </style>
 
+@* Organizer View *@
 @if (_user?.Id == _event.OrganizerId)
 {
     <input style="width: 30%" @bind="_event.Title" type="text">
@@ -35,12 +36,58 @@
             <input type="number" @bind="_searchDuration" @bind:after="StateHasChanged" min="0.25" step="0.25" style="width: 60px" />
         </label>
     </div>
+
     <ul>
         @foreach (var slot in GetTopAvailableSlots())
         {
             <li>@slot</li>
         }
     </ul>
+
+    if (_event.FinalizedStart == null && _event.FinalizedEnd == null)
+    {
+        <h3>Finalize Schedule</h3>
+        @* Final Day Selector *@
+        if (_event.DaysOfTheWeek)
+        {
+            <label for="final-day-select">Day: </label>
+            <select id="final-day-select" @bind=@selectedFinalDay>
+                <option value="null">Choose...</option>
+                @foreach (DateOnly day in _event.Dates)
+                {
+                    <option value=@day>@day.ToString()</option>
+                }
+            </select>
+        }
+        @* Final Time Selectors *@
+        <label for="final-start-time-select">Start Time: </label>
+        <select id="final-start-time-select" @bind=@selectedFinalStartTime>
+            <option value=@(-1)>Choose...</option>
+            @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime + 1; time_++)
+            {
+                <option value=@time_>@($"{time_ / 4:00}{time_ * 15 % 60:00}")</option>
+            }
+        </select>
+
+        <label for="final-end-time-select">End Time: </label>
+        <select id="final-start-time-select" @bind=@selectedFinalEndTime>
+            <option value=@(-1)>Choose...</option>
+            @for (int time_ = (int)_event.EarliestTime; time_ < (int)_event.LatestTime + 1; time_++)
+            {
+                <option value=@time_>@($"{time_ / 4:00}{time_ * 15 % 60:00}")</option>
+            }
+        </select>
+
+        @if (selectedFinalStartTime < selectedFinalEndTime && selectedFinalEndTime != -1 && selectedFinalStartTime != -1 && selectedFinalDay != null)
+        {
+            <button @onclick="FinalizeTime" >Finalize</button>
+        }
+        else
+        {
+            <button disabled>Finalize</button>
+        }
+    }
+
 }
 else
 {
@@ -57,7 +104,8 @@ else
     <p><a href="/">Login</a> to submit availability for this event. </p>
 }
 
-@if (_user != null || _user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE)
+@* Attendee View *@
+@if ((_user != null || _user?.Id == _event.OrganizerId || _event.Privacy != Privacy.PRIVATE) && _event.FinalizedStart == null && _event.FinalizedEnd == null)
 {
     <table>
         @* Year / Day of Week *@
@@ -176,25 +224,38 @@ else
             }
         }
     </table>
-}
-@if (_attendance != null)
-{
-    <button @onclick="DeleteUserAvailability">Delete My Availability</button>
-}
-@if (_user?.Id == _event.OrganizerId || _event.Privacy == Privacy.PUBLIC_IDENTIFIED)
-{
-    <table>
-        <tr>
-            <th>@($"{_event.Dates[_attendeeTooltip[0]].ToString("yyyy-MM-dd")} {(_attendeeTooltip[1] + _event.EarliestTime) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime) % 4 * 15:00} - {(_attendeeTooltip[1] + _event.EarliestTime + 1) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime + 1) % 4 * 15:00}")</th>
-        </tr>
-        @for (int i = 0; i < _event.Attendees.Count; i++)
-        {
-            string name = _event.Attendees[i].Name;
+
+    @if (_attendance != null)
+    {
+        <button @onclick="DeleteUserAvailability">Delete My Availability</button>
+    }
+
+    @if (_user?.Id == _event.OrganizerId || _event.Privacy == Privacy.PUBLIC_IDENTIFIED)
+    {
+        <table>
             <tr>
-                <td style="background-color: @(_attendances.Count == 0 ? "#555" : _attendances[_attendeeTooltip[0]][_attendeeTooltip[1]].Contains(name) ? "#00bb00" : "#bb0000")">@name</td>
+                <th>@($"{_event.Dates[_attendeeTooltip[0]].ToString("yyyy-MM-dd")} {(_attendeeTooltip[1] + _event.EarliestTime) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime) % 4 * 15:00} - {(_attendeeTooltip[1] + _event.EarliestTime + 1) / 4:00}{(_attendeeTooltip[1] + _event.EarliestTime + 1) % 4 * 15:00}")</th>
             </tr>
-        }
-    </table>
+            @for (int i = 0; i < _event.Attendees.Count; i++)
+            {
+                string name = _event.Attendees[i].Name;
+                <tr>
+                    <td style="background-color: @(_attendances.Count == 0 ? "#555" : _attendances[_attendeeTooltip[0]][_attendeeTooltip[1]].Contains(name) ? "#00bb00" : "#bb0000")">@name</td>
+                </tr>
+            }
+        </table>
+    }
+}
+
+@if(_event.FinalizedStart != null && _event.FinalizedEnd != null)
+{
+    <h2>This event has been finalized!</h2>
+    <p>Date: @_event.FinalizedStart.Value.Date.ToShortDateString()</p>
+    <p>Time: @_event.FinalizedStart.Value.ToString("HHmm") - @_event.FinalizedEnd.Value.ToString("HHmm")</p>
+    @if(_user?.Id == _event.OrganizerId)
+    {
+        <button @onclick="UnfinalizeTime">Un-finalize Event</button>
+    }
 }
 
 @code {
@@ -216,6 +277,11 @@ else
     private bool _selecting = true;
 
     private double _searchDuration = 1.0;
+
+    // Currently selected options for organizer's finalized time
+    private int selectedFinalEndTime = -1;
+    private int selectedFinalStartTime = -1;
+    private DateOnly? selectedFinalDay = null;
 
     private async Task MouseDown(int date, int time)
     {
@@ -440,5 +506,43 @@ else
                 
                 return $"{date} {startStr} - {endStr} ({x.Count})";
             });
+    }
+
+    private async void FinalizeTime()
+    {
+        if (_user?.Id != _event.OrganizerId) return;
+
+        // Form datetime objects from selections
+        DateTime finalizedStart = new DateTime(
+            selectedFinalDay!.Value, 
+            TimeOnly.MinValue.AddMinutes(selectedFinalStartTime * 15)
+        );
+
+        DateTime finalizedEnd = new DateTime(
+            selectedFinalDay!.Value, 
+            TimeOnly.MinValue.AddMinutes(selectedFinalEndTime * 15)
+        );
+
+        // Update DB entries
+        _event.FinalizedStart = finalizedStart;
+        _event.FinalizedEnd = finalizedEnd;
+
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        databaseContext.Update(_event);
+        await databaseContext.SaveChangesAsync();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void UnfinalizeTime()
+    {
+        _event.FinalizedStart = null;
+        _event.FinalizedEnd = null;
+
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        databaseContext.Update(_event);
+        await databaseContext.SaveChangesAsync();
+
+        await InvokeAsync(StateHasChanged);
     }
 }

@@ -87,6 +87,10 @@ input[type=submit]:hover {
     color: #000000;
 }
 
+button:disabled {
+    color: #aaaaaa
+}
+
 input[type=text],
 input[type=password],
 input[type=number] {
