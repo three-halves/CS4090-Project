@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using Db
 @using Microsoft.EntityFrameworkCore
+@using System.Linq
 @inject IDbContextFactory<DatabaseContext> _dbContextFactory
 @inject NavigationManager _navigationManager
 
@@ -26,6 +27,20 @@
     </select>
     <br>
     <button style="width: 30%" @onclick="SaveDetails">Save</button>
+    <br>
+    <h3>Top 3 Available Times</h3>
+    <div style="margin-bottom: 10px;">
+        <label>
+            Duration (Hours): 
+            <input type="number" @bind="_searchDuration" @bind:after="StateHasChanged" min="0.25" step="0.25" style="width: 60px" />
+        </label>
+    </div>
+    <ul>
+        @foreach (var slot in GetTopAvailableSlots())
+        {
+            <li>@slot</li>
+        }
+    </ul>
 }
 else
 {
@@ -200,6 +215,8 @@ else
     private int[]? _selection;
     private bool _selecting = true;
 
+    private double _searchDuration = 1.0;
+
     private async Task MouseDown(int date, int time)
     {
         if (_user == null) return;
@@ -371,5 +388,57 @@ else
             databaseContext.Update(_event);
             await databaseContext.SaveChangesAsync();
         }
+    }
+
+    private IEnumerable<string> GetTopAvailableSlots()
+    {
+        int durationInQuarterHours = (int)Math.Ceiling(_searchDuration * 4);
+        if (durationInQuarterHours < 1) durationInQuarterHours = 1;
+
+        var availableSlots = new List<(int DateIndex, int TimeIndex, int Count)>();
+
+        for (int dateIndex = 0; dateIndex < _attendances.Count; dateIndex++)
+        {
+            var daySlots = _attendances[dateIndex];
+            if (daySlots.Count < durationInQuarterHours) continue;
+
+            for (int timeIndex = 0; timeIndex <= daySlots.Count - durationInQuarterHours; timeIndex++)
+            {
+                // Find intersection of attendees for the requested duration
+                HashSet<string>? intersection = null;
+
+                for (int k = 0; k < durationInQuarterHours; k++)
+                {
+                    var attendeesInSlot = daySlots[timeIndex + k];
+                    if (intersection == null)
+                    {
+                        intersection = new HashSet<string>(attendeesInSlot);
+                    }
+                    else
+                    {
+                        intersection.IntersectWith(attendeesInSlot);
+                    }
+                    
+                    if (intersection.Count == 0) break;
+                }
+
+                availableSlots.Add((dateIndex, timeIndex, intersection?.Count ?? 0));
+            }
+        }
+
+        return availableSlots
+            .OrderByDescending(x => x.Count)
+            .Take(3)
+            .Select(x =>
+            {
+                var date = _event.Dates[x.DateIndex].ToString("yyyy-MM-dd");
+                long startVal = _event.EarliestTime + x.TimeIndex;
+                long endVal = startVal + durationInQuarterHours;
+                
+                string startStr = $"{startVal / 4:00}{startVal % 4 * 15:00}";
+                string endStr = $"{endVal / 4:00}{endVal % 4 * 15:00}";
+                
+                return $"{date} {startStr} - {endStr} ({x.Count})";
+            });
     }
 }
