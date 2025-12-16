@@ -1,7 +1,132 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+@using Db
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.EntityFrameworkCore.Storage
+@inject IDbContextFactory<DatabaseContext> _dbContextFactory
+@inject AppAuthenticator _appAuthenticator
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<AuthorizeView Context="Account">
+    <NotAuthorized>
+        <h1>Login</h1>
+        <label for="username">Username:</label>
+        <input name="username" type="text" style="width: 400px" @bind="_username"><br>
+        <label for="password">Password:</label>
+        <input name="password" type="password" style="width: 400px" @bind="_password" onkeyup="if (event.keyCode == 13) { login.click(); }"><br>
+        <button id="login" @onclick="TryLogin">Login</button><br>
+        <button id="login" @onclick="CreateAccount">Create Account</button><br>
+        <p style="color: #f00">@_error</p>
+    </NotAuthorized>
+    <Authorized>
+        @if (_user != null)
+        {
+            <h1>Home</h1>
+            <p>Name: <input @bind=_user.Name type="text" style="width: 400px"><button @onclick="UpdateName">Update</button></p>
+            <p>Username: @_user.Username</p>
+            <button type="button" class="btn btn-primary" @onclick="TryLogout">Logout</button>
+            <p>Organizing Events</p>
+            <a href="/new-event">Create Event</a>
+            <table>
+                @foreach (Event event_ in _user.Organizing)
+                {
+                    <tr>
+                        <td><a href="/event/@event_.Id">@event_.Title</a></td>
+                        <td><button @onclick="@(async () => await DeleteEvent(event_))">Delete</button></td>
+                    </tr>
+                }
+            </table>
+            <p>Attending Events</p>
+            <table>
+                @foreach (Event event_ in _user.Attending)
+                {
+                    <tr>
+                        <td><a href="/event/@event_.Id">@event_.Title</a></td>
+                    </tr>
+                }
+            </table>
+        }
+    </Authorized>
+    <Authorizing>
+        <p>Authorizing in process...</p>
+    </Authorizing>
+</AuthorizeView>
 
-Welcome to your new app.
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationState { get; set; }
+
+    private string _username = "";
+    private string _password = "";
+    private string _error = "";
+    private User? _user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateUser();
+    }
+
+    private async Task TryLogin()
+    {
+        if (!(await _appAuthenticator.LoginAsync(_username, AppAuthenticator.GetPasswordHash(_password))))
+        {
+            _error = "Invalid Username or Password";
+            await InvokeAsync(StateHasChanged);
+        }
+        else
+        {
+            _error = "";
+            await UpdateUser();
+        }
+    }
+
+    private async Task TryLogout()
+    {
+        await _appAuthenticator.LogoutAsync();
+        await UpdateUser();
+    }
+
+    private async Task CreateAccount()
+    {
+        if (await _appAuthenticator.CreateLoginAsync(_username, AppAuthenticator.GetPasswordHash(_password))) await TryLogin();
+        else _error = "Username in Use";
+    }
+
+    private async Task UpdateUser()
+    {
+        if (authenticationState != null)
+        {
+            var authState = await authenticationState;
+            if (authState?.User.Identity?.Name != null)
+            {
+                using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+                _user = await databaseContext.Users.FindAsync(new Guid(authState.User.Identity.Name));
+                if (_user != null)
+                {
+                    await databaseContext.Entry(_user).Collection(user => user.Organizing).LoadAsync();
+                    await databaseContext.Entry(_user).Collection(user => user.Attending).LoadAsync();
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task UpdateName()
+    {
+        if (_user == null) return;
+        using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+        databaseContext.Update(_user);
+        await databaseContext.SaveChangesAsync();
+    }
+
+    private async Task DeleteEvent(Event event_)
+    {
+        if (_user != null && event_.OrganizerId == _user.Id)
+        {
+            using DatabaseContext databaseContext = await _dbContextFactory.CreateDbContextAsync();
+            databaseContext.Events.Remove(event_);
+            await databaseContext.SaveChangesAsync();
+        }
+    }
+}
